@@ -91,7 +91,8 @@ Options keys:
 Twitter/X, Medium, Instagram, Blogger & Tumblr (all via file upload, scraping or OAuth)
 
 ## Work Flow
-* Create a new git branch for each feature or bugfix.
+* Check the PRD document regularly to ensure alignment with product goals. Update as necessary.
+* Follow the established coding standards and best practices for WordPress development.
 * Write clear, concise commit messages.
 * Commit regularly as you work, adding changes incrementally.
 * Open a pull request when your feature is complete for review.
