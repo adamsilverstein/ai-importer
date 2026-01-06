@@ -89,3 +89,9 @@ Options keys:
 ## MVP Platforms
 
 Twitter/X, Medium, Instagram, Blogger (all via file upload or OAuth)
+
+## Work Flow
+* Create a new git branch for each feature or bugfix.
+* Write clear, concise commit messages.
+* Commit regularly as you work, adding changes incrementally.
+* Open a pull request when your feature is complete for review.
