@@ -88,6 +88,21 @@ class Admin {
 	}
 
 	/**
+	 * Get asset data from the build directory.
+	 *
+	 * @return array{dependencies: array<string>, version: string}|false Asset data or false if not available.
+	 */
+	protected function get_asset_data(): array|false {
+		$asset_file = AI_IMPORTER_PLUGIN_DIR . 'build/index.asset.php';
+
+		if ( ! file_exists( $asset_file ) ) {
+			return false;
+		}
+
+		return require $asset_file;
+	}
+
+	/**
 	 * Enqueue admin scripts and styles.
 	 *
 	 * @param string $hook_suffix The current admin page hook suffix.
@@ -99,10 +114,9 @@ class Admin {
 			return;
 		}
 
-		$asset_file = AI_IMPORTER_PLUGIN_DIR . 'build/index.asset.php';
+		$assets = $this->get_asset_data();
 
-		if ( file_exists( $asset_file ) ) {
-			$assets = require $asset_file;
+		if ( false !== $assets ) {
 
 			wp_enqueue_script(
 				'ai-importer-admin',

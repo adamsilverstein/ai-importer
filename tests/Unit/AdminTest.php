@@ -79,8 +79,17 @@ class AdminTest extends TestCase {
 	 * @return void
 	 */
 	public function test_enqueue_scripts_loads_on_plugin_pages(): void {
-		// Mock file_exists to return true for the asset file.
-		Functions\when( 'file_exists' )->justReturn( true );
+		// Create a partial mock to override the protected get_asset_data method.
+		$admin = \Mockery::mock( Admin::class )->makePartial();
+		$admin->shouldAllowMockingProtectedMethods();
+		$admin->shouldReceive( 'get_asset_data' )
+			->once()
+			->andReturn(
+				array(
+					'dependencies' => array( 'wp-element', 'wp-components' ),
+					'version'      => '1.0.0',
+				)
+			);
 
 		// Mock WordPress functions for asset loading.
 		Functions\expect( 'wp_enqueue_script' )->once();
@@ -90,7 +99,6 @@ class AdminTest extends TestCase {
 		Functions\when( 'wp_create_nonce' )->justReturn( 'test-nonce' );
 		Functions\when( 'admin_url' )->justReturn( 'https://example.com/wp-admin/' );
 
-		$admin = new Admin();
 		$admin->enqueue_scripts( 'toplevel_page_ai-importer' );
 
 		$this->assertBrainMonkeyExpectations();
