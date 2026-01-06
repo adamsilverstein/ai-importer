@@ -104,7 +104,7 @@ jobs:
         run: npm ci
 
       - name: Run production build
-        run: npm run build:production
+        run: npm run build
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
