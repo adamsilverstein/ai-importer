@@ -23,8 +23,9 @@ test.describe( 'AI Importer Admin Page', () => {
 		await page.fill( '#user_pass', WP_ADMIN_PASS );
 		await page.click( '#wp-submit' );
 
-		// Wait for login to complete.
+		// Wait for login to complete and verify success.
 		await page.waitForURL( /\/wp-admin\// );
+		await expect( page.locator( '#wpadminbar' ) ).toBeVisible();
 	} );
 
 	test( 'should display the AI Importer menu item', async ( { page } ) => {
