@@ -1,0 +1,15 @@
+includes:
+	- vendor/szepeviktor/phpstan-wordpress/extension.neon
+
+parameters:
+	level: 5
+	paths:
+		- ai-importer.php
+		- includes/
+	excludePaths:
+		- vendor/
+		- node_modules/
+		- build/
+		- tests/
+	bootstrapFiles:
+		- vendor/autoload.php
