@@ -88,7 +88,7 @@ Options keys:
 
 ## MVP Platforms
 
-Twitter/X, Medium, Instagram, Blogger (all via file upload or OAuth)
+Twitter/X, Medium, Instagram, Blogger & Tumblr (all via file upload, scraping or OAuth)
 
 ## Work Flow
 * Create a new git branch for each feature or bugfix.

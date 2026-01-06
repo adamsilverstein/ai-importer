@@ -1,8 +1,8 @@
 # AI Importer - Product Requirements Document
 
-**Version:** 1.0  
-**Last Updated:** January 5, 2026  
-**Author:** Adam Silverstein  
+**Version:** 1.0
+**Last Updated:** January 5, 2026
+**Author:** Adam Silverstein
 **Repository:** https://github.com/adamsilverstein/ai-importer
 
 ---
@@ -86,22 +86,22 @@ WordPress powers 43% of the web. A universal, AI-powered import solution would:
 
 ### Product Principles
 
-1. **Universal by Design**  
+1. **Universal by Design**
    Support every major content platform through a consistent interface. One tool to rule them all.
 
-2. **Intelligent, Not Complicated**  
+2. **Intelligent, Not Complicated**
    AI handles the complexity of content mapping. Users make high-level decisions, not field-by-field configurations.
 
-3. **Preserve Everything That Matters**  
+3. **Preserve Everything That Matters**
    Metadata, timestamps, relationships, engagement stats, and media should survive the migration intact.
 
-4. **Enhance, Don't Just Move**  
+4. **Enhance, Don't Just Move**
    Use the migration as an opportunity to improve content: add alt text, generate SEO metadata, stitch threads into articles.
 
-5. **Respect User Autonomy**  
+5. **Respect User Autonomy**
    Bring-your-own-key model. No vendor lock-in. Full control over AI provider choice and data handling.
 
-6. **WordPress-Native**  
+6. **WordPress-Native**
    Feel like a natural part of WordPress. Use blocks, respect theme structures, integrate with existing plugins.
 
 ---
@@ -111,27 +111,27 @@ WordPress powers 43% of the web. A universal, AI-powered import solution would:
 ### Primary Personas
 
 #### 1. The Content Creator Consolidator
-**Profile:** Blogger, writer, or thought leader with 5+ years of content across platforms  
-**Goal:** Create a comprehensive archive of their work on their own domain  
-**Pain Point:** Has thousands of tweets, hundreds of Instagram posts, dozens of Medium articles—all siloed  
+**Profile:** Blogger, writer, or thought leader with 5+ years of content across platforms
+**Goal:** Create a comprehensive archive of their work on their own domain
+**Pain Point:** Has thousands of tweets, hundreds of Instagram posts, dozens of Medium articles—all siloed
 **Success Criteria:** All content searchable on their WordPress site within a day
 
 #### 2. The Platform Refugee
-**Profile:** User leaving a platform due to policy changes, ownership concerns, or feature degradation  
-**Goal:** Quickly export content before it's lost or becomes inaccessible  
-**Pain Point:** Needs to act fast, doesn't have time to learn complex tools  
+**Profile:** User leaving a platform due to policy changes, ownership concerns, or feature degradation
+**Goal:** Quickly export content before it's lost or becomes inaccessible
+**Pain Point:** Needs to act fast, doesn't have time to learn complex tools
 **Success Criteria:** Complete migration with minimal content loss in under an hour
 
 #### 3. The Professional Archiver
-**Profile:** Agency or professional managing multiple brands/clients  
-**Goal:** Migrate client content as part of website projects  
-**Pain Point:** Needs reliable, repeatable process that works across different sites  
+**Profile:** Agency or professional managing multiple brands/clients
+**Goal:** Migrate client content as part of website projects
+**Pain Point:** Needs reliable, repeatable process that works across different sites
 **Success Criteria:** Consistent results across different WordPress configurations
 
 #### 4. The SEO Optimizer
-**Profile:** Marketer who sees untapped SEO value in social content  
-**Goal:** Transform social proof into searchable, indexable content  
-**Pain Point:** Social posts don't rank; wants the content to drive organic traffic  
+**Profile:** Marketer who sees untapped SEO value in social content
+**Goal:** Transform social proof into searchable, indexable content
+**Pain Point:** Social posts don't rank; wants the content to drive organic traffic
 **Success Criteria:** Imported content ranks for relevant keywords
 
 ### Secondary Personas
@@ -377,7 +377,7 @@ The AI layer provides:
 
 #### Source Adapters
 Platform-specific modules that handle authentication and content extraction. Each adapter implements a common interface:
-- `authenticate()` - Connect to source (OAuth, API key, or file upload)
+- `authenticate()` - Connect to source (OAuth, API key, website scraping or file upload)
 - `fetch_manifest()` - Get inventory of available content
 - `fetch_item()` - Retrieve individual content items
 - `get_settings_schema()` - Define adapter-specific options
@@ -414,7 +414,7 @@ Handles the actual WordPress content creation:
 
 ```
 1. USER CONNECTS SOURCE
-   └─► Adapter authenticates (OAuth/file upload)
+   └─► Adapter authenticates (OAuth/file upload/web scraping)
    └─► Connection data stored in wp_options
 
 2. MANIFEST GENERATION
@@ -664,19 +664,19 @@ AI Importer (Top-level menu)
 
 ### Design Principles
 
-1. **Progressive Disclosure**  
+1. **Progressive Disclosure**
    Show simple defaults first, advanced options on demand
 
-2. **Explain AI Decisions**  
+2. **Explain AI Decisions**
    Always show reasoning behind AI suggestions
 
-3. **Non-Destructive by Default**  
+3. **Non-Destructive by Default**
    Import as drafts, provide rollback, preserve originals
 
-4. **Clear Progress Indication**  
+4. **Clear Progress Indication**
    Users should always know what's happening and how long it will take
 
-5. **Graceful Degradation**  
+5. **Graceful Degradation**
    Work without AI (manual mapping) if API unavailable
 
 ---
@@ -768,7 +768,7 @@ Based on content analysis and destination site structure, AI suggests:
 
 **Example Suggestion:**
 ```
-"Your site has a 'Tutorials' custom post type with 'Technology' and 'Difficulty' 
+"Your site has a 'Tutorials' custom post type with 'Technology' and 'Difficulty'
 taxonomies. I found 23 thread tutorials in your Twitter archive. I recommend:
 
 - Import tutorial threads as 'Tutorials' post type
@@ -820,19 +820,19 @@ SEO meta generation:     2,104 items × ~100 tokens = ~210k tokens
 
 ### Data Handling Principles
 
-1. **Minimal Data Transmission**  
+1. **Minimal Data Transmission**
    Only send content to AI provider when user explicitly requests enhancements
 
-2. **No Third-Party Storage**  
+2. **No Third-Party Storage**
    Plugin does not send data to any servers other than user's chosen AI provider
 
-3. **Local Processing**  
+3. **Local Processing**
    All parsing, normalization, and WordPress operations happen locally
 
-4. **Transparent AI Usage**  
+4. **Transparent AI Usage**
    Clear indication of what data is sent to AI and why
 
-5. **User-Controlled Keys**  
+5. **User-Controlled Keys**
    API keys stored in WordPress, never transmitted to plugin author
 
 ### Security Measures
@@ -888,24 +888,24 @@ SEO meta generation:     2,104 items × ~100 tokens = ~210k tokens
 
 ### Performance Strategies
 
-1. **Streaming Parsing**  
+1. **Streaming Parsing**
    Parse large JSON/XML files without loading entirely into memory
 
-2. **Lazy Loading**  
+2. **Lazy Loading**
    Only fetch full content items when needed, not during manifest generation
 
-3. **Batch Processing**  
+3. **Batch Processing**
    Process items in batches of 10-50 via Action Scheduler
 
-4. **Progressive Enhancement**  
+4. **Progressive Enhancement**
    AI enhancements processed in separate background pass
 
-5. **Caching**  
+5. **Caching**
    - Manifest cached for session
    - AI analysis cached by content hash
    - Destination schema cached with invalidation
 
-6. **Optimized Media Handling**  
+6. **Optimized Media Handling**
    - Parallel downloads where possible
    - Skip already-existing media (by hash)
    - Generate thumbnails asynchronously
@@ -917,15 +917,15 @@ SEO meta generation:     2,104 items × ~100 tokens = ~210k tokens
 add_action( 'ai_importer_process_batch', function( $batch_id ) {
     $batch_size = 25; // Items per job
     $time_limit = 25; // Seconds before scheduling next job
-    
+
     $start = time();
     $processed = 0;
-    
+
     while ( $processed < $batch_size && ( time() - $start ) < $time_limit ) {
         // Process next item
         $processed++;
     }
-    
+
     if ( $remaining > 0 ) {
         // Schedule continuation
         as_enqueue_async_action( 'ai_importer_process_batch', [ $batch_id ] );
@@ -1101,8 +1101,8 @@ v2.0.0 - Major Update
 
 ### Appendix C: User Research Summary
 
-**Research Conducted:** January 2026  
-**Participants:** 12 WordPress site owners  
+**Research Conducted:** January 2026
+**Participants:** 12 WordPress site owners
 **Method:** Semi-structured interviews
 
 **Key Findings:**
