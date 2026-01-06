@@ -19,10 +19,10 @@
 		"packages-update": "wp-scripts packages-update"
 	},
 	"devDependencies": {
+		"@playwright/test": "1.55.0",
 		"@wordpress/scripts": "^28.0.0"
 	},
 	"dependencies": {
-		"@playwright/test": "^1.57.0",
 		"@wordpress/api-fetch": "^7.0.0",
 		"@wordpress/components": "^28.0.0",
 		"@wordpress/data": "^10.0.0",
