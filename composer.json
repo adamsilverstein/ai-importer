@@ -38,7 +38,7 @@
 		"lint": "phpcs",
 		"lint:fix": "phpcbf",
 		"test": "phpunit",
-		"phpstan": "phpstan analyse"
+		"phpstan": "phpstan analyse --memory-limit=512M"
 	},
 	"config": {
 		"allow-plugins": {

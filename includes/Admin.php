@@ -15,13 +15,6 @@ namespace AI_Importer;
 class Admin {
 
 	/**
-	 * Admin page hook suffix.
-	 *
-	 * @var string
-	 */
-	private string $hook_suffix = '';
-
-	/**
 	 * Initialize admin.
 	 *
 	 * @return void
@@ -37,7 +30,7 @@ class Admin {
 	 * @return void
 	 */
 	public function register_menu(): void {
-		$this->hook_suffix = add_menu_page(
+		add_menu_page(
 			__( 'AI Importer', 'ai-importer' ),
 			__( 'AI Importer', 'ai-importer' ),
 			'manage_options',

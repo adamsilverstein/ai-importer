@@ -19,11 +19,4 @@
 			<directory suffix=".php">./includes</directory>
 		</include>
 	</source>
-
-	<coverage>
-		<report>
-			<html outputDirectory="coverage-report"/>
-			<text outputFile="php://stdout" showOnlySummary="true"/>
-		</report>
-	</coverage>
 </phpunit>

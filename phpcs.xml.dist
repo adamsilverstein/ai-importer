@@ -22,6 +22,9 @@
 	<rule ref="WordPress">
 		<!-- Allow short array syntax -->
 		<exclude name="Universal.Arrays.DisallowShortArraySyntax"/>
+		<!-- Allow PSR-4 style filenames (ClassName.php instead of class-classname.php) -->
+		<exclude name="WordPress.Files.FileName.NotHyphenatedLowercase"/>
+		<exclude name="WordPress.Files.FileName.InvalidClassFileName"/>
 	</rule>
 
 	<!-- Use WordPress-Extra for additional checks -->
