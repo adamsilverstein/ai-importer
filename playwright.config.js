@@ -33,7 +33,10 @@ module.exports = defineConfig( {
 	/* Reporter to use */
 	reporter: [
 		[ 'list' ],
-		[ 'html', { outputFolder: './tests/e2e/playwright-report', open: 'never' } ],
+		[
+			'html',
+			{ outputFolder: './tests/e2e/playwright-report', open: 'never' },
+		],
 	],
 
 	/* Shared settings for all the projects below */

@@ -32,7 +32,9 @@ test.describe( 'AI Importer Admin Page', () => {
 		await page.goto( '/wp-admin/' );
 
 		// Look for the AI Importer menu item.
-		const menuItem = page.locator( '#adminmenu a[href*="ai-importer"]' ).first();
+		const menuItem = page
+			.locator( '#adminmenu a[href*="ai-importer"]' )
+			.first();
 		await expect( menuItem ).toBeVisible();
 		await expect( menuItem ).toHaveText( /AI Importer/i );
 	} );
