@@ -79,6 +79,9 @@ class AdminTest extends TestCase {
 	 * @return void
 	 */
 	public function test_enqueue_scripts_loads_on_plugin_pages(): void {
+		// Mock file_exists to return true for the asset file.
+		Functions\when( 'file_exists' )->justReturn( true );
+
 		// Mock WordPress functions for asset loading.
 		Functions\expect( 'wp_enqueue_script' )->once();
 		Functions\expect( 'wp_enqueue_style' )->once();
