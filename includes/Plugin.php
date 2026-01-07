@@ -7,6 +7,8 @@
 
 namespace AI_Importer;
 
+use AI_Importer\Adapters\AdapterRegistry;
+
 /**
  * Plugin class.
  *
@@ -27,6 +29,13 @@ class Plugin {
 	 * @var Admin|null
 	 */
 	private ?Admin $admin = null;
+
+	/**
+	 * Adapter registry instance.
+	 *
+	 * @var AdapterRegistry|null
+	 */
+	private ?AdapterRegistry $adapter_registry = null;
 
 	/**
 	 * Get singleton instance.
@@ -51,6 +60,19 @@ class Plugin {
 	 * @return void
 	 */
 	public function init(): void {
+		// Initialize adapter registry.
+		$this->adapter_registry = AdapterRegistry::get_instance();
+
+		/**
+		 * Fires when adapters should be registered.
+		 *
+		 * Plugins and themes can hook into this action to register
+		 * their own source adapters.
+		 *
+		 * @param AdapterRegistry $registry The adapter registry instance.
+		 */
+		do_action( 'ai_importer_register_adapters', $this->adapter_registry );
+
 		// Initialize admin.
 		if ( is_admin() ) {
 			$this->admin = new Admin();
@@ -77,5 +99,14 @@ class Plugin {
 	 */
 	public function get_admin(): ?Admin {
 		return $this->admin;
+	}
+
+	/**
+	 * Get adapter registry instance.
+	 *
+	 * @return AdapterRegistry|null
+	 */
+	public function get_adapter_registry(): ?AdapterRegistry {
+		return $this->adapter_registry;
 	}
 }
