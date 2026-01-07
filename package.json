@@ -49,7 +49,7 @@
 	},
 	"lint-staged": {
 		"*.php": [
-			"composer run lint"
+			"./vendor/bin/phpcs"
 		],
 		"src/**/*.js": [
 			"wp-scripts lint-js"

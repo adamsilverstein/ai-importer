@@ -2,9 +2,6 @@
 <ruleset name="AI Importer Coding Standards">
 	<description>Coding standards for AI Importer plugin.</description>
 
-	<!-- What to scan -->
-	<file>.</file>
-
 	<!-- Exclude paths -->
 	<exclude-pattern>/vendor/*</exclude-pattern>
 	<exclude-pattern>/node_modules/*</exclude-pattern>
