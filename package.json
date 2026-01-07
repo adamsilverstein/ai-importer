@@ -5,22 +5,35 @@
 	"author": "Adam Silverstein",
 	"license": "GPL-2.0-or-later",
 	"main": "build/index.js",
+	"engines": {
+		"node": ">=18.0.0",
+		"npm": ">=9.0.0"
+	},
 	"scripts": {
 		"build": "wp-scripts build",
+		"build:production": "NODE_ENV=production wp-scripts build",
 		"start": "wp-scripts start",
-		"lint:js": "wp-scripts lint-js",
-		"lint:js:fix": "wp-scripts lint-js --fix",
-		"lint:css": "wp-scripts lint-style",
-		"lint:css:fix": "wp-scripts lint-style --fix",
+		"lint:js": "wp-scripts lint-js src/",
+		"lint:js:fix": "wp-scripts lint-js src/ --fix",
+		"lint:css": "wp-scripts lint-style src/**/*.scss",
+		"lint:css:fix": "wp-scripts lint-style src/**/*.scss --fix",
 		"lint": "npm run lint:js && npm run lint:css",
-		"format": "wp-scripts format",
+		"lint:fix": "npm run lint:js:fix && npm run lint:css:fix",
+		"format": "wp-scripts format src/",
+		"format:check": "wp-scripts format src/ --check",
 		"test:unit": "wp-scripts test-unit-js",
+		"test:unit:watch": "wp-scripts test-unit-js --watch",
 		"test:e2e": "wp-scripts test-playwright",
-		"packages-update": "wp-scripts packages-update"
+		"check-engines": "wp-scripts check-engines",
+		"check-licenses": "wp-scripts check-licenses",
+		"packages-update": "wp-scripts packages-update",
+		"prebuild": "npm run check-engines"
 	},
 	"devDependencies": {
 		"@playwright/test": "1.55.0",
-		"@wordpress/scripts": "^28.0.0"
+		"@wordpress/dependency-extraction-webpack-plugin": "^6.0.0",
+		"@wordpress/scripts": "^28.0.0",
+		"@wordpress/stylelint-config": "^22.0.0"
 	},
 	"dependencies": {
 		"@wordpress/api-fetch": "^7.0.0",
