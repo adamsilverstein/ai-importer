@@ -30,7 +30,9 @@
 		"prebuild": "npm run check-engines"
 	},
 	"devDependencies": {
+		"@playwright/test": "1.55.0",
 		"@wordpress/dependency-extraction-webpack-plugin": "^6.0.0",
+		"@wordpress/eslint-plugin": "^21.0.0",
 		"@wordpress/scripts": "^28.0.0",
 		"@wordpress/stylelint-config": "^22.0.0"
 	},
