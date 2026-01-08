@@ -108,7 +108,7 @@ class HtmlSanitizer {
 
 		// Fallback: Simple conversion.
 		$paragraphs = preg_split( '/\n\s*\n/', $text );
-		if ( false === $paragraphs || ! is_array( $paragraphs ) ) {
+		if ( false === $paragraphs ) {
 			return '<p>' . nl2br( $text ) . '</p>';
 		}
 

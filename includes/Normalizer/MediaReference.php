@@ -217,8 +217,8 @@ class MediaReference {
 			return null;
 		}
 
-		// Add explicit null check for PHPStan even though has_dimensions() already checks.
-		if ( null === $this->width || null === $this->height || 0 === $this->height ) {
+		// Double-check height to prevent division by zero (PHPStan requires explicit check).
+		if ( 0 === $this->height ) {
 			return null;
 		}
 
