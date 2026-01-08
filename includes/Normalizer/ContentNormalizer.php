@@ -19,7 +19,10 @@ use DateTimeImmutable;
 abstract class ContentNormalizer {
 
 	/**
-	 * Common media hosting domains.
+	 * Common media hosting patterns (domains and path patterns).
+	 *
+	 * These patterns are used to identify URLs that likely point to media files
+	 * even when the URL lacks a file extension.
 	 *
 	 * @var array<string>
 	 */

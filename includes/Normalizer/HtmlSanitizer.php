@@ -175,7 +175,7 @@ class HtmlSanitizer {
 
 		$parsed = wp_parse_url( $url );
 
-		if ( false === $parsed || ! is_array( $parsed ) || ! isset( $parsed['host'] ) ) {
+		if ( false === $parsed || ! isset( $parsed['host'] ) ) {
 			return $url;
 		}
 
