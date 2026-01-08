@@ -19,6 +19,22 @@ use DateTimeImmutable;
 abstract class ContentNormalizer {
 
 	/**
+	 * Common media hosting domains.
+	 *
+	 * @var array<string>
+	 */
+	private const MEDIA_HOSTS = array(
+		'pbs.twimg.com',
+		'video.twimg.com',
+		'instagram.com/p/',
+		'cdninstagram.com',
+		'imgur.com',
+		'i.imgur.com',
+		'giphy.com',
+		'media.tumblr.com',
+	);
+
+	/**
 	 * HTML sanitizer instance.
 	 *
 	 * @var HtmlSanitizer
@@ -137,47 +153,13 @@ abstract class ContentNormalizer {
 		$path = wp_parse_url( $url, PHP_URL_PATH );
 		if ( false === $path || null === $path ) {
 			// Check for common media hosting patterns even without a path.
-			$media_hosts = array(
-				'pbs.twimg.com',
-				'video.twimg.com',
-				'instagram.com/p/',
-				'cdninstagram.com',
-				'imgur.com',
-				'i.imgur.com',
-				'giphy.com',
-				'media.tumblr.com',
-			);
-
-			foreach ( $media_hosts as $host ) {
-				if ( strpos( $url, $host ) !== false ) {
-					return true;
-				}
-			}
-
-			return false;
+			return $this->is_media_host( $url );
 		}
 
 		$extension_info = pathinfo( $path, PATHINFO_EXTENSION );
 		if ( ! is_string( $extension_info ) || empty( $extension_info ) ) {
 			// Check for common media hosting patterns.
-			$media_hosts = array(
-				'pbs.twimg.com',
-				'video.twimg.com',
-				'instagram.com/p/',
-				'cdninstagram.com',
-				'imgur.com',
-				'i.imgur.com',
-				'giphy.com',
-				'media.tumblr.com',
-			);
-
-			foreach ( $media_hosts as $host ) {
-				if ( strpos( $url, $host ) !== false ) {
-					return true;
-				}
-			}
-
-			return false;
+			return $this->is_media_host( $url );
 		}
 
 		$extension = strtolower( $extension_info );
@@ -211,18 +193,17 @@ abstract class ContentNormalizer {
 		}
 
 		// Check for common media hosting patterns.
-		$media_hosts = array(
-			'pbs.twimg.com',
-			'video.twimg.com',
-			'instagram.com/p/',
-			'cdninstagram.com',
-			'imgur.com',
-			'i.imgur.com',
-			'giphy.com',
-			'media.tumblr.com',
-		);
+		return $this->is_media_host( $url );
+	}
 
-		foreach ( $media_hosts as $host ) {
+	/**
+	 * Check if a URL is from a known media hosting service.
+	 *
+	 * @param string $url URL to check.
+	 * @return bool True if URL is from a media host.
+	 */
+	private function is_media_host( string $url ): bool {
+		foreach ( self::MEDIA_HOSTS as $host ) {
 			if ( strpos( $url, $host ) !== false ) {
 				return true;
 			}
