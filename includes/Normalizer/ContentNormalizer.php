@@ -134,8 +134,53 @@ abstract class ContentNormalizer {
 	 * @return bool True if URL appears to be media.
 	 */
 	protected function is_media_url( string $url ): bool {
-		$path      = wp_parse_url( $url, PHP_URL_PATH );
-		$extension = strtolower( pathinfo( $path ?? '', PATHINFO_EXTENSION ) );
+		$path = wp_parse_url( $url, PHP_URL_PATH );
+		if ( false === $path || null === $path ) {
+			// Check for common media hosting patterns even without a path.
+			$media_hosts = array(
+				'pbs.twimg.com',
+				'video.twimg.com',
+				'instagram.com/p/',
+				'cdninstagram.com',
+				'imgur.com',
+				'i.imgur.com',
+				'giphy.com',
+				'media.tumblr.com',
+			);
+
+			foreach ( $media_hosts as $host ) {
+				if ( strpos( $url, $host ) !== false ) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		$extension_info = pathinfo( $path, PATHINFO_EXTENSION );
+		if ( ! is_string( $extension_info ) || empty( $extension_info ) ) {
+			// Check for common media hosting patterns.
+			$media_hosts = array(
+				'pbs.twimg.com',
+				'video.twimg.com',
+				'instagram.com/p/',
+				'cdninstagram.com',
+				'imgur.com',
+				'i.imgur.com',
+				'giphy.com',
+				'media.tumblr.com',
+			);
+
+			foreach ( $media_hosts as $host ) {
+				if ( strpos( $url, $host ) !== false ) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		$extension = strtolower( $extension_info );
 
 		$media_extensions = array(
 			'jpg',
