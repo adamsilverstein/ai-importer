@@ -19,6 +19,25 @@ use DateTimeImmutable;
 abstract class ContentNormalizer {
 
 	/**
+	 * Common media hosting patterns (domains and path patterns).
+	 *
+	 * These patterns are used to identify URLs that likely point to media files
+	 * even when the URL lacks a file extension.
+	 *
+	 * @var array<string>
+	 */
+	private const MEDIA_HOSTS = array(
+		'pbs.twimg.com',
+		'video.twimg.com',
+		'instagram.com/p/',
+		'cdninstagram.com',
+		'imgur.com',
+		'i.imgur.com',
+		'giphy.com',
+		'media.tumblr.com',
+	);
+
+	/**
 	 * HTML sanitizer instance.
 	 *
 	 * @var HtmlSanitizer
@@ -134,8 +153,19 @@ abstract class ContentNormalizer {
 	 * @return bool True if URL appears to be media.
 	 */
 	protected function is_media_url( string $url ): bool {
-		$path      = wp_parse_url( $url, PHP_URL_PATH );
-		$extension = strtolower( pathinfo( $path ?? '', PATHINFO_EXTENSION ) );
+		$path = wp_parse_url( $url, PHP_URL_PATH );
+		if ( false === $path || null === $path ) {
+			// Check for common media hosting patterns even without a path.
+			return $this->is_media_host( $url );
+		}
+
+		$extension_info = pathinfo( $path, PATHINFO_EXTENSION );
+		if ( ! is_string( $extension_info ) || empty( $extension_info ) ) {
+			// Check for common media hosting patterns.
+			return $this->is_media_host( $url );
+		}
+
+		$extension = strtolower( $extension_info );
 
 		$media_extensions = array(
 			'jpg',
@@ -166,18 +196,17 @@ abstract class ContentNormalizer {
 		}
 
 		// Check for common media hosting patterns.
-		$media_hosts = array(
-			'pbs.twimg.com',
-			'video.twimg.com',
-			'instagram.com/p/',
-			'cdninstagram.com',
-			'imgur.com',
-			'i.imgur.com',
-			'giphy.com',
-			'media.tumblr.com',
-		);
+		return $this->is_media_host( $url );
+	}
 
-		foreach ( $media_hosts as $host ) {
+	/**
+	 * Check if a URL is from a known media hosting service.
+	 *
+	 * @param string $url URL to check.
+	 * @return bool True if URL is from a media host.
+	 */
+	private function is_media_host( string $url ): bool {
+		foreach ( self::MEDIA_HOSTS as $host ) {
 			if ( strpos( $url, $host ) !== false ) {
 				return true;
 			}

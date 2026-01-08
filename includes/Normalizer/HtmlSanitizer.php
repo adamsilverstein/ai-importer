@@ -68,24 +68,24 @@ class HtmlSanitizer {
 	 */
 	public function strip_scripts( string $html ): string {
 		// Remove script tags and content.
-		$html = preg_replace( '/<script\b[^>]*>.*?<\/script>/is', '', $html );
+		$html = (string) preg_replace( '/<script\b[^>]*>.*?<\/script>/is', '', $html );
 
 		// Remove style tags and content.
-		$html = preg_replace( '/<style\b[^>]*>.*?<\/style>/is', '', $html );
+		$html = (string) preg_replace( '/<style\b[^>]*>.*?<\/style>/is', '', $html );
 
 		// Remove noscript tags and content.
-		$html = preg_replace( '/<noscript\b[^>]*>.*?<\/noscript>/is', '', $html );
+		$html = (string) preg_replace( '/<noscript\b[^>]*>.*?<\/noscript>/is', '', $html );
 
 		// Remove iframe tags.
-		$html = preg_replace( '/<iframe\b[^>]*>.*?<\/iframe>/is', '', $html );
+		$html = (string) preg_replace( '/<iframe\b[^>]*>.*?<\/iframe>/is', '', $html );
 
 		// Remove object/embed tags.
-		$html = preg_replace( '/<object\b[^>]*>.*?<\/object>/is', '', $html );
-		$html = preg_replace( '/<embed\b[^>]*\/?>/is', '', $html );
+		$html = (string) preg_replace( '/<object\b[^>]*>.*?<\/object>/is', '', $html );
+		$html = (string) preg_replace( '/<embed\b[^>]*\/?>/is', '', $html );
 
 		// Remove event handlers (onclick, onerror, etc.).
-		$html = preg_replace( '/\s*on\w+\s*=\s*["\'][^"\']*["\']/', '', $html );
-		$html = preg_replace( '/\s*on\w+\s*=\s*\S+/', '', $html );
+		$html = (string) preg_replace( '/\s*on\w+\s*=\s*["\'][^"\']*["\']/', '', $html );
+		$html = (string) preg_replace( '/\s*on\w+\s*=\s*\S+/', '', $html );
 
 		return $html;
 	}
@@ -108,6 +108,10 @@ class HtmlSanitizer {
 
 		// Fallback: Simple conversion.
 		$paragraphs = preg_split( '/\n\s*\n/', $text );
+		if ( false === $paragraphs ) {
+			return '<p>' . nl2br( $text ) . '</p>';
+		}
+
 		$paragraphs = array_filter( array_map( 'trim', $paragraphs ) );
 
 		if ( empty( $paragraphs ) ) {
@@ -153,9 +157,9 @@ class HtmlSanitizer {
 		$text = str_replace( "\xC2\xA0", ' ', $text );
 
 		// Remove null bytes and other control characters (except newlines and tabs).
-		$text = preg_replace( '/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $text );
+		$result = preg_replace( '/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $text );
 
-		return $text;
+		return is_string( $result ) ? $result : $text;
 	}
 
 	/**
@@ -253,10 +257,10 @@ class HtmlSanitizer {
 	 */
 	public function normalize_whitespace( string $text ): string {
 		// Replace multiple spaces with single space.
-		$text = preg_replace( '/[ \t]+/', ' ', $text );
+		$text = (string) preg_replace( '/[ \t]+/', ' ', $text );
 
 		// Replace multiple newlines with double newline.
-		$text = preg_replace( '/\n{3,}/', "\n\n", $text );
+		$text = (string) preg_replace( '/\n{3,}/', "\n\n", $text );
 
 		// Trim whitespace from each line.
 		$lines = explode( "\n", $text );
@@ -283,7 +287,9 @@ class HtmlSanitizer {
 
 		// Fallback: Simple URL pattern matching.
 		$pattern = '/(https?:\/\/[^\s<>"\']+)/i';
-		return preg_replace( $pattern, '<a href="$1">$1</a>', $text );
+		$result  = preg_replace( $pattern, '<a href="$1">$1</a>', $text );
+
+		return is_string( $result ) ? $result : $text;
 	}
 
 	/**
@@ -299,7 +305,7 @@ class HtmlSanitizer {
 		}
 
 		$pattern = '/#(\w+)/u';
-		return preg_replace_callback(
+		$result  = preg_replace_callback(
 			$pattern,
 			function ( $matches ) use ( $base_url ) {
 				$tag = $matches[1];
@@ -308,6 +314,8 @@ class HtmlSanitizer {
 			},
 			$text
 		);
+
+		return is_string( $result ) ? $result : $text;
 	}
 
 	/**
@@ -323,7 +331,7 @@ class HtmlSanitizer {
 		}
 
 		$pattern = '/@(\w+)/u';
-		return preg_replace_callback(
+		$result  = preg_replace_callback(
 			$pattern,
 			function ( $matches ) use ( $base_url ) {
 				$username = $matches[1];
@@ -332,6 +340,8 @@ class HtmlSanitizer {
 			},
 			$text
 		);
+
+		return is_string( $result ) ? $result : $text;
 	}
 
 	/**

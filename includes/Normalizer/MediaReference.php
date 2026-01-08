@@ -213,6 +213,7 @@ class MediaReference {
 	 * @return float|null The aspect ratio (width/height) or null if dimensions unavailable.
 	 */
 	public function get_aspect_ratio(): ?float {
+		// Check if dimensions are available and prevent division by zero.
 		if ( ! $this->has_dimensions() || 0 === $this->height ) {
 			return null;
 		}
@@ -330,8 +331,17 @@ class MediaReference {
 	 * @return string The detected media type.
 	 */
 	public static function detect_type_from_url( string $url ): string {
-		$path      = wp_parse_url( $url, PHP_URL_PATH );
-		$extension = strtolower( pathinfo( $path ?? '', PATHINFO_EXTENSION ) );
+		$path = wp_parse_url( $url, PHP_URL_PATH );
+		if ( false === $path || null === $path ) {
+			return self::TYPE_IMAGE;
+		}
+
+		$extension = pathinfo( $path, PATHINFO_EXTENSION );
+		if ( ! is_string( $extension ) || empty( $extension ) ) {
+			return self::TYPE_IMAGE;
+		}
+
+		$extension = strtolower( $extension );
 
 		$image_extensions = array( 'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'ico', 'bmp' );
 		$video_extensions = array( 'mp4', 'webm', 'mov', 'avi', 'wmv', 'flv', 'mkv' );
@@ -365,12 +375,16 @@ class MediaReference {
 	 */
 	public function get_extension(): ?string {
 		$path = wp_parse_url( $this->source_url, PHP_URL_PATH );
-		if ( empty( $path ) ) {
+		if ( false === $path || null === $path || empty( $path ) ) {
 			return null;
 		}
 
 		$extension = pathinfo( $path, PATHINFO_EXTENSION );
-		return ! empty( $extension ) ? strtolower( $extension ) : null;
+		if ( ! is_string( $extension ) || empty( $extension ) ) {
+			return null;
+		}
+
+		return strtolower( $extension );
 	}
 
 	/**
@@ -380,7 +394,7 @@ class MediaReference {
 	 */
 	public function get_filename(): ?string {
 		$path = wp_parse_url( $this->source_url, PHP_URL_PATH );
-		if ( empty( $path ) ) {
+		if ( false === $path || null === $path || empty( $path ) ) {
 			return null;
 		}
 
