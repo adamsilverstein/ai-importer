@@ -145,6 +145,10 @@ class HtmlSanitizer {
 			"\xE2\x80\xA6" => '...', // Ellipsis.
 		);
 
+		foreach ( $replacements as $search => $replace ) {
+			$text = str_replace( $search, $replace, $text );
+		}
+
 		// Only replace non-breaking spaces while preserving other Unicode characters.
 		$text = str_replace( "\xC2\xA0", ' ', $text );
 
