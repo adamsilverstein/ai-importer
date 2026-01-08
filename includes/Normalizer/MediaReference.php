@@ -213,7 +213,7 @@ class MediaReference {
 	 * @return float|null The aspect ratio (width/height) or null if dimensions unavailable.
 	 */
 	public function get_aspect_ratio(): ?float {
-		// Check for null dimensions and prevent division by zero.
+		// Check if dimensions are available and prevent division by zero.
 		if ( ! $this->has_dimensions() || 0 === $this->height ) {
 			return null;
 		}
