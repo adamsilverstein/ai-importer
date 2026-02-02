@@ -7,6 +7,7 @@
 
 namespace AI_Importer\Tests\Unit;
 
+use AI_Importer\Adapters\AdapterRegistry;
 use AI_Importer\Plugin;
 use Brain\Monkey\Functions;
 use Brain\Monkey\Actions;
@@ -17,18 +18,22 @@ use Brain\Monkey\Actions;
 class PluginTest extends TestCase {
 
 	/**
-	 * Reset the singleton instance before each test.
+	 * Reset the singleton instances before each test.
 	 *
 	 * @return void
 	 */
 	protected function set_up(): void {
 		parent::set_up();
 
-		// Reset the singleton instance using reflection.
+		// Reset the Plugin singleton instance using reflection.
 		$reflection = new \ReflectionClass( Plugin::class );
 		$instance   = $reflection->getProperty( 'instance' );
 		$instance->setAccessible( true );
 		$instance->setValue( null, null );
+
+		// Reset the AdapterRegistry singleton and clear adapters.
+		$registry = AdapterRegistry::get_instance();
+		$registry->reset();
 	}
 
 	/**
