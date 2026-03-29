@@ -8,6 +8,10 @@
 namespace AI_Importer;
 
 use AI_Importer\Adapters\AdapterRegistry;
+use AI_Importer\Processor\BatchProcessor;
+use AI_Importer\Processor\BatchRepository;
+use AI_Importer\Processor\ItemProcessor;
+use AI_Importer\Processor\MediaSideloader;
 
 /**
  * Plugin class.
@@ -36,6 +40,13 @@ class Plugin {
 	 * @var AdapterRegistry|null
 	 */
 	private ?AdapterRegistry $adapter_registry = null;
+
+	/**
+	 * Batch processor instance.
+	 *
+	 * @var BatchProcessor|null
+	 */
+	private ?BatchProcessor $batch_processor = null;
 
 	/**
 	 * Get singleton instance.
@@ -73,6 +84,13 @@ class Plugin {
 		 */
 		do_action( 'ai_importer_register_adapters', $this->adapter_registry );
 
+		// Initialize import processor.
+		$media_sideloader      = new MediaSideloader();
+		$item_processor        = new ItemProcessor( $media_sideloader );
+		$batch_repository      = new BatchRepository();
+		$this->batch_processor = new BatchProcessor( $batch_repository, $item_processor, $this->adapter_registry );
+		$this->batch_processor->init();
+
 		// Initialize admin.
 		if ( is_admin() ) {
 			$this->admin = new Admin();
@@ -108,5 +126,14 @@ class Plugin {
 	 */
 	public function get_adapter_registry(): ?AdapterRegistry {
 		return $this->adapter_registry;
+	}
+
+	/**
+	 * Get batch processor instance.
+	 *
+	 * @return BatchProcessor|null
+	 */
+	public function get_batch_processor(): ?BatchProcessor {
+		return $this->batch_processor;
 	}
 }
