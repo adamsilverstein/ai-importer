@@ -52,6 +52,9 @@ function init(): void {
 		dirname( AI_IMPORTER_PLUGIN_BASENAME ) . '/languages'
 	);
 
+	// Register built-in adapters.
+	add_action( 'ai_importer_register_adapters', __NAMESPACE__ . '\\register_builtin_adapters' );
+
 	// Initialize plugin components.
 	$plugin = Plugin::get_instance();
 	$plugin->init();
@@ -90,6 +93,16 @@ function check_dependencies(): bool {
 	}
 
 	return true;
+}
+
+/**
+ * Register built-in source adapters.
+ *
+ * @param Adapters\AdapterRegistry $registry The adapter registry.
+ * @return void
+ */
+function register_builtin_adapters( Adapters\AdapterRegistry $registry ): void {
+	$registry->register( new Adapters\TwitterAdapter() );
 }
 
 /**
