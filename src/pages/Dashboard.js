@@ -26,18 +26,13 @@ export default function Dashboard() {
 
 	useEffect( () => {
 		const load = async () => {
-			try {
-				const [ sourcesData, importsData ] = await Promise.all( [
-					fetchSources().catch( () => [] ),
-					fetchImports( 5 ).catch( () => [] ),
-				] );
-				setSources( sourcesData );
-				setImports( importsData );
-			} catch ( err ) {
-				setError( err.message );
-			} finally {
-				setLoading( false );
-			}
+			const [ sourcesData, importsData ] = await Promise.all( [
+				fetchSources().catch( () => [] ),
+				fetchImports( 5 ).catch( () => [] ),
+			] );
+			setSources( sourcesData );
+			setImports( importsData );
+			setLoading( false );
 		};
 		load();
 	}, [] );

@@ -93,11 +93,9 @@ export default function ImportProgress( { batchId, onComplete } ) {
 		/* eslint-enable no-alert */
 		try {
 			await rollbackImport( batchId );
-			setProgress( ( prev ) => ( {
-				...prev,
-				state: 'rolled_back',
-				state_label: __( 'Rolled Back', 'ai-importer' ),
-			} ) );
+			// Re-fetch progress to get the actual state from the server.
+			const data = await fetchImportProgress( batchId );
+			setProgress( data );
 		} catch ( err ) {
 			setError( err.message );
 		}

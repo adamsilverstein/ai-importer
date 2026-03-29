@@ -52,6 +52,24 @@ export default function ContentReview( { manifest, onImport, isLoading } ) {
 		];
 	}, [ manifest.items ] );
 
+	const mediaCount = useMemo(
+		() =>
+			manifest.items.filter( ( item ) => item.media_urls?.length > 0 )
+				.length,
+		[ manifest.items ]
+	);
+
+	const dateRange = useMemo( () => {
+		const dates = manifest.items
+			.map( ( item ) => item.created_at )
+			.filter( Boolean )
+			.sort();
+		if ( dates.length === 0 ) {
+			return null;
+		}
+		return { earliest: dates[ 0 ], latest: dates[ dates.length - 1 ] };
+	}, [ manifest.items ] );
+
 	const toggleItem = ( itemId ) => {
 		setSelectedIds( ( prev ) =>
 			prev.includes( itemId )
@@ -95,22 +113,22 @@ export default function ContentReview( { manifest, onImport, isLoading } ) {
 								{ __( 'Total Items', 'ai-importer' ) }
 							</span>
 						</div>
-						<div className="ai-importer-content-review__stat">
-							<span className="ai-importer-content-review__stat-value">
-								{ manifest.stats.with_media }
-							</span>
-							<span className="ai-importer-content-review__stat-label">
-								{ __( 'With Media', 'ai-importer' ) }
-							</span>
-						</div>
-						{ manifest.date_range?.earliest && (
+						{ mediaCount > 0 && (
 							<div className="ai-importer-content-review__stat">
 								<span className="ai-importer-content-review__stat-value">
-									{ formatDate(
-										manifest.date_range.earliest
-									) }
+									{ mediaCount }
+								</span>
+								<span className="ai-importer-content-review__stat-label">
+									{ __( 'With Media', 'ai-importer' ) }
+								</span>
+							</div>
+						) }
+						{ dateRange && (
+							<div className="ai-importer-content-review__stat">
+								<span className="ai-importer-content-review__stat-value">
+									{ formatDate( dateRange.earliest ) }
 									{ ' - ' }
-									{ formatDate( manifest.date_range.latest ) }
+									{ formatDate( dateRange.latest ) }
 								</span>
 								<span className="ai-importer-content-review__stat-label">
 									{ __( 'Date Range', 'ai-importer' ) }

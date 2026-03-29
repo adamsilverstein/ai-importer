@@ -2,7 +2,7 @@
  * Import history page.
  */
 
-import { useState, useEffect } from '@wordpress/element';
+import { useState, useEffect, useCallback } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import {
 	Button,
@@ -24,6 +24,13 @@ export default function History() {
 	const [ loading, setLoading ] = useState( true );
 	const [ error, setError ] = useState( null );
 	const [ expandedBatch, setExpandedBatch ] = useState( null );
+
+	const handleImportComplete = useCallback( () => {
+		// Refresh the imports list when an import completes.
+		fetchImports( 50 )
+			.then( setImports )
+			.catch( () => {} );
+	}, [] );
 
 	useEffect( () => {
 		const load = async () => {
@@ -73,7 +80,7 @@ export default function History() {
 					</Button>
 					<ImportProgress
 						batchId={ expandedBatch }
-						onComplete={ () => {} }
+						onComplete={ handleImportComplete }
 					/>
 				</>
 			) }
