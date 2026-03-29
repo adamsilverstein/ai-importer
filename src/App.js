@@ -1,38 +1,35 @@
 /**
- * Main App component.
+ * Main App component with page routing.
  */
 
 import { __ } from '@wordpress/i18n';
-import { Card, CardBody, CardHeader } from '@wordpress/components';
+
+import Dashboard from './pages/Dashboard';
+import ImportWizard from './pages/ImportWizard';
+import Sources from './pages/Sources';
+import History from './pages/History';
 
 /**
- * App component.
+ * Get the page component based on the current admin page slug.
  *
- * @return {JSX.Element} The App component.
+ * @return {JSX.Element} The page component.
  */
 function App() {
+	const page = aiImporter?.currentPage || 'ai-importer';
+
+	const pages = {
+		'ai-importer': Dashboard,
+		'ai-importer-import': ImportWizard,
+		'ai-importer-sources': Sources,
+		'ai-importer-history': History,
+	};
+
+	const PageComponent = pages[ page ] || Dashboard;
+
 	return (
 		<div className="ai-importer-app">
 			<h1>{ __( 'AI Importer', 'ai-importer' ) }</h1>
-			<Card>
-				<CardHeader>
-					<h2>{ __( 'Welcome to AI Importer', 'ai-importer' ) }</h2>
-				</CardHeader>
-				<CardBody>
-					<p>
-						{ __(
-							'Import your content from social media platforms into WordPress using AI-powered analysis and mapping.',
-							'ai-importer'
-						) }
-					</p>
-					<p>
-						{ __(
-							'Get started by connecting a source or uploading an archive file.',
-							'ai-importer'
-						) }
-					</p>
-				</CardBody>
-			</Card>
+			<PageComponent />
 		</div>
 	);
 }
