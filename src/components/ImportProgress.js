@@ -2,7 +2,7 @@
  * Import progress component.
  */
 
-import { useState, useEffect, useCallback } from '@wordpress/element';
+import { useState, useEffect, useCallback, useRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import {
 	Button,
@@ -29,32 +29,50 @@ import {
 export default function ImportProgress( { batchId, onComplete } ) {
 	const [ progress, setProgress ] = useState( null );
 	const [ error, setError ] = useState( null );
+	const pollingRef = useRef( false );
+	const completedRef = useRef( false );
 
 	const poll = useCallback( async () => {
+		if ( pollingRef.current ) {
+			return;
+		}
+		pollingRef.current = true;
 		try {
 			const data = await fetchImportProgress( batchId );
 			setProgress( data );
 
 			if (
-				data.state === 'completed' ||
-				data.state === 'failed' ||
-				data.state === 'rolled_back'
+				( data.state === 'completed' ||
+					data.state === 'failed' ||
+					data.state === 'rolled_back' ) &&
+				! completedRef.current
 			) {
+				completedRef.current = true;
 				onComplete?.( data );
+			}
+			if ( data.state === 'processing' ) {
+				completedRef.current = false;
 			}
 		} catch ( err ) {
 			setError(
 				err.message || __( 'Failed to fetch progress.', 'ai-importer' )
 			);
+		} finally {
+			pollingRef.current = false;
 		}
 	}, [ batchId, onComplete ] );
 
 	useEffect( () => {
+		completedRef.current = false;
 		poll();
+	}, [ batchId, poll ] );
+
+	useEffect( () => {
+		if ( progress?.state !== 'processing' ) {
+			return;
+		}
 		const interval = setInterval( () => {
-			if ( progress?.state === 'processing' ) {
-				poll();
-			}
+			poll();
 		}, 3000 );
 
 		return () => clearInterval( interval );

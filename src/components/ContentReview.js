@@ -194,7 +194,11 @@ export default function ContentReview( { manifest, onImport, isLoading } ) {
 								<CheckboxControl
 									checked={ selectedIds.includes( item.id ) }
 									onChange={ () => toggleItem( item.id ) }
+									label={
+										item.title || item.excerpt || item.id
+									}
 									__nextHasNoMarginBottom
+									hideLabelFromVision
 								/>
 								<div className="ai-importer-content-review__item-content">
 									<span className="ai-importer-content-review__item-title">
