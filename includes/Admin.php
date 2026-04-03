@@ -133,16 +133,20 @@ class Admin {
 				$assets['version']
 			);
 
+			// Determine current page.
+			$page = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : 'ai-importer'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading page slug for navigation, no action taken.
+
 			// Localize script with data.
 			wp_localize_script(
 				'ai-importer-admin',
 				'aiImporter',
 				array(
-					'restUrl'   => rest_url( 'ai-importer/v1/' ),
-					'nonce'     => wp_create_nonce( 'wp_rest' ),
-					'adminUrl'  => admin_url(),
-					'pluginUrl' => AI_IMPORTER_PLUGIN_URL,
-					'version'   => AI_IMPORTER_VERSION,
+					'restUrl'     => rest_url( 'ai-importer/v1/' ),
+					'nonce'       => wp_create_nonce( 'wp_rest' ),
+					'adminUrl'    => admin_url(),
+					'pluginUrl'   => AI_IMPORTER_PLUGIN_URL,
+					'version'     => AI_IMPORTER_VERSION,
+					'currentPage' => $page,
 				)
 			);
 		}
