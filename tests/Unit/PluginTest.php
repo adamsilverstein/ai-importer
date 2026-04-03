@@ -7,6 +7,7 @@
 
 namespace AI_Importer\Tests\Unit;
 
+use AI_Importer\Adapters\AdapterRegistry;
 use AI_Importer\Plugin;
 use Brain\Monkey\Functions;
 use Brain\Monkey\Actions;
@@ -29,6 +30,9 @@ class PluginTest extends TestCase {
 		$instance   = $reflection->getProperty( 'instance' );
 		$instance->setAccessible( true );
 		$instance->setValue( null, null );
+
+		// Reset the adapter registry so built-in adapters can re-register.
+		AdapterRegistry::get_instance()->reset();
 	}
 
 	/**
