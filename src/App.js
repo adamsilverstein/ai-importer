@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard';
 import ImportWizard from './pages/ImportWizard';
 import Sources from './pages/Sources';
 import History from './pages/History';
+import Settings from './pages/Settings';
 
 /**
  * Get the page component based on the current admin page slug.
@@ -22,6 +23,7 @@ function App() {
 		'ai-importer-import': ImportWizard,
 		'ai-importer-sources': Sources,
 		'ai-importer-history': History,
+		'ai-importer-settings': Settings,
 	};
 
 	const PageComponent = pages[ page ] || Dashboard;

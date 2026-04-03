@@ -79,11 +79,15 @@ export default function ContentReview( { manifest, onImport, isLoading } ) {
 	};
 
 	const toggleAll = ( checked ) => {
-		if ( checked ) {
-			setSelectedIds( filteredItems.map( ( item ) => item.id ) );
-		} else {
-			setSelectedIds( [] );
-		}
+		const filteredIds = filteredItems.map( ( item ) => item.id );
+		const filteredSet = new Set( filteredIds );
+
+		setSelectedIds( ( prev ) => {
+			if ( checked ) {
+				return [ ...new Set( [ ...prev, ...filteredIds ] ) ];
+			}
+			return prev.filter( ( id ) => ! filteredSet.has( id ) );
+		} );
 	};
 
 	const allSelected =

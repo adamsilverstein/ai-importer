@@ -102,7 +102,20 @@ export default function ImportProgress( { batchId, onComplete } ) {
 	};
 
 	if ( ! progress ) {
-		return <p>{ __( 'Loading…', 'ai-importer' ) }</p>;
+		return (
+			<div className="ai-importer-progress">
+				{ error && (
+					<Notice
+						status="error"
+						isDismissible
+						onDismiss={ () => setError( null ) }
+					>
+						{ error }
+					</Notice>
+				) }
+				<p>{ __( 'Loading…', 'ai-importer' ) }</p>
+			</div>
+		);
 	}
 
 	const isActive = progress.state === 'processing';
