@@ -218,7 +218,8 @@ class SourcesController extends WP_REST_Controller {
 			return $adapter;
 		}
 
-		$credentials = array();
+		$credentials   = array();
+		$uploaded_file = null;
 
 		// Handle file uploads.
 		$files = $request->get_file_params();
@@ -230,6 +231,7 @@ class SourcesController extends WP_REST_Controller {
 				return $upload;
 			}
 
+			$uploaded_file       = $upload;
 			$credentials['file'] = $upload;
 		}
 
@@ -250,6 +252,11 @@ class SourcesController extends WP_REST_Controller {
 		$success = $adapter->authenticate( $credentials );
 
 		if ( ! $success ) {
+			// Clean up the uploaded file to avoid orphaned archives.
+			if ( $uploaded_file && file_exists( $uploaded_file ) ) {
+				wp_delete_file( $uploaded_file );
+			}
+
 			return new WP_Error(
 				'authentication_failed',
 				__( 'Failed to connect to the source. Please check your credentials and try again.', 'ai-importer' ),
@@ -392,12 +399,17 @@ class SourcesController extends WP_REST_Controller {
 		$upload_dir = wp_upload_dir();
 		$dest_dir   = $upload_dir['basedir'] . '/ai-importer-tmp';
 
-		if ( ! file_exists( $dest_dir ) && ! wp_mkdir_p( $dest_dir ) ) {
-			return new WP_Error(
-				'upload_error',
-				__( 'Failed to create upload directory.', 'ai-importer' ),
-				array( 'status' => 500 )
-			);
+		if ( ! file_exists( $dest_dir ) ) {
+			if ( ! wp_mkdir_p( $dest_dir ) ) {
+				return new WP_Error(
+					'upload_error',
+					__( 'Failed to create upload directory.', 'ai-importer' ),
+					array( 'status' => 500 )
+				);
+			}
+
+			// Protect the directory from direct web access.
+			$this->protect_directory( $dest_dir );
 		}
 
 		$filename = wp_unique_filename( $dest_dir, sanitize_file_name( $file['name'] ) );
@@ -413,5 +425,32 @@ class SourcesController extends WP_REST_Controller {
 		}
 
 		return $dest;
+	}
+
+	/**
+	 * Protect a directory from direct web access.
+	 *
+	 * Creates .htaccess (Apache) and index.php files to prevent
+	 * directory listing and direct file access.
+	 *
+	 * @param string $dir Directory path.
+	 * @return void
+	 */
+	private function protect_directory( string $dir ): void {
+		// Apache: deny all direct access.
+		$htaccess = $dir . '/.htaccess';
+
+		if ( ! file_exists( $htaccess ) ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Writing server config, not content.
+			file_put_contents( $htaccess, "Deny from all\n" );
+		}
+
+		// Fallback: empty index.php to prevent directory listing.
+		$index = $dir . '/index.php';
+
+		if ( ! file_exists( $index ) ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Writing server config, not content.
+			file_put_contents( $index, "<?php\n// Silence is golden.\n" );
+		}
 	}
 }
