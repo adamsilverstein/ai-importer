@@ -79,12 +79,17 @@ class TwitterNormalizer extends ContentNormalizer {
 		// Extract author info.
 		$author = $this->extract_author( $raw_item );
 
+		$created_at   = $raw_item['created_at'] ?? '';
+		$publish_date = ! empty( $created_at )
+			? $this->convert_date( $created_at )
+			: new \DateTimeImmutable();
+
 		return new NormalizedItem(
 			source_id: $raw_item['id'],
 			source_adapter: 'twitter',
 			content_type: $content_type,
 			content: $content,
-			publish_date: $this->convert_date( $raw_item['created_at'] ?? '' ),
+			publish_date: $publish_date,
 			title: $raw_item['title'] ?? null,
 			source_url: $raw_item['original_url'] ?? null,
 			media: $media,
