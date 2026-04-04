@@ -392,8 +392,12 @@ class SourcesController extends WP_REST_Controller {
 		$upload_dir = wp_upload_dir();
 		$dest_dir   = $upload_dir['basedir'] . '/ai-importer-tmp';
 
-		if ( ! file_exists( $dest_dir ) ) {
-			wp_mkdir_p( $dest_dir );
+		if ( ! file_exists( $dest_dir ) && ! wp_mkdir_p( $dest_dir ) ) {
+			return new WP_Error(
+				'upload_error',
+				__( 'Failed to create upload directory.', 'ai-importer' ),
+				array( 'status' => 500 )
+			);
 		}
 
 		$filename = wp_unique_filename( $dest_dir, sanitize_file_name( $file['name'] ) );
