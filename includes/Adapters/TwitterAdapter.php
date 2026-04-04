@@ -261,9 +261,9 @@ class TwitterAdapter extends AbstractAdapter {
 	 * Validate that a ZIP file is a valid Twitter archive.
 	 *
 	 * @param string $file_path Path to the ZIP file.
-	 * @return true|WP_Error True if valid, WP_Error otherwise.
+	 * @return bool|WP_Error True if valid, WP_Error otherwise.
 	 */
-	private function validate_archive( string $file_path ): true|WP_Error {
+	private function validate_archive( string $file_path ): bool|WP_Error {
 		$zip = new \ZipArchive();
 		$res = $zip->open( $file_path );
 
@@ -496,10 +496,6 @@ class TwitterAdapter extends AbstractAdapter {
 
 		// Use first line, truncated to 100 chars.
 		$first_line = strtok( $text, "\n" );
-
-		if ( false === $first_line ) {
-			$first_line = $text;
-		}
 
 		if ( mb_strlen( $first_line ) > 100 ) {
 			$first_line = mb_substr( $first_line, 0, 97 ) . '...';
