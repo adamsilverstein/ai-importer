@@ -183,7 +183,7 @@ class AbstractAdapterTest extends TestCase {
 		Functions\when( 'get_transient' )->justReturn( false );
 		Functions\when( 'set_transient' )->justReturn( true );
 		Functions\when( 'delete_transient' )->justReturn( true );
-		Functions\when( 'get_bloginfo' )->justReturn( '6.4' );
+		Functions\when( 'get_bloginfo' )->justReturn( '7.0' );
 	}
 
 	/**

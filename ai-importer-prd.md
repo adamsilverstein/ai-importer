@@ -34,7 +34,7 @@
 
 Unlike existing import tools that require manual configuration and produce inconsistent results, AI Importer uses large language models to understand content structure, suggest optimal mappings, and enhance imported content with features like alt text generation, thread stitching, and SEO optimization.
 
-The plugin follows a "bring your own key" model, leveraging the WordPress AI Experiments plugin for LLM infrastructure, making it accessible to any WordPress user with an API key from providers like Anthropic or OpenAI.
+The plugin follows a "bring your own key" model, leveraging the native WordPress AI capabilities introduced in WordPress 7.0 for LLM infrastructure, making it accessible to any WordPress user with an API key from providers like Anthropic or OpenAI.
 
 ---
 
@@ -323,8 +323,8 @@ The AI layer provides:
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                      │
 │  ┌────────────────────────────────────────────────────────────────┐ │
-│  │                AI Experiments Plugin (Dependency)               │ │
-│  │  • API Key Management    • Model Selection    • WP_AI_Client   │ │
+│  │            WordPress Native AI (wp_get_ai_client)             │ │
+│  │  • API Key Management    • Model Selection    • AI Client     │ │
 │  └────────────────────────────────────────────────────────────────┘ │
 │                                    ▲                                 │
 │                                    │                                 │
@@ -397,7 +397,7 @@ Introspects the destination WordPress site to understand:
 - Theme supports and capabilities
 
 #### AI Service
-Wrapper around WP_AI_Client that provides migration-specific methods:
+Wrapper around the WordPress native AI client (`wp_get_ai_client()`) that provides migration-specific methods:
 - Content analysis and classification
 - Mapping suggestion generation
 - Enhancement tasks (alt text, thread stitching, etc.)
@@ -462,22 +462,20 @@ The plugin primarily uses WordPress core tables but adds metadata:
 | Layer | Technology |
 |-------|------------|
 | Language | PHP 8.1+ |
-| Framework | WordPress 6.4+ |
+| Framework | WordPress 7.0+ |
 | Admin UI | React (via @wordpress/scripts) |
 | Background Jobs | Action Scheduler |
-| AI Client | wordpress/wp-ai-client |
+| AI Client | WordPress native AI (wp_get_ai_client) |
 | HTTP | WordPress HTTP API |
 | Testing | PHPUnit, Playwright |
 
 ### Dependencies
 
 **Required:**
-- WordPress 6.4+
+- WordPress 7.0+
 - PHP 8.1+
-- AI Experiments plugin (`ai`)
 
 **Composer:**
-- `wordpress/wp-ai-client`
 - `woocommerce/action-scheduler` (or bundled)
 
 **npm (dev):**
@@ -791,7 +789,7 @@ taxonomies. I found 23 thread tutorials in your Twitter archive. I recommend:
 
 ### AI Provider Support
 
-Via the AI Experiments plugin, users can choose their provider:
+Via the WordPress native AI capabilities (WordPress 7.0+), users can choose their provider:
 
 | Provider | Models | Notes |
 |----------|--------|-------|
@@ -1122,14 +1120,13 @@ v2.0.0 - Major Update
 ### Appendix D: Technical Specifications
 
 **Minimum Requirements:**
-- WordPress 6.4+
+- WordPress 7.0+
 - PHP 8.1+
 - MySQL 5.7+ / MariaDB 10.3+
 - 128MB PHP memory limit
-- AI Experiments plugin
 
 **Recommended:**
-- WordPress 6.5+
+- WordPress 7.0+
 - PHP 8.2+
 - 256MB PHP memory limit
 - WP-Cron or real cron configured
@@ -1144,7 +1141,7 @@ v2.0.0 - Major Update
 ### Appendix E: References
 
 - WordPress Plugin Developer Handbook
-- AI Experiments Plugin Documentation
+- WordPress AI API Documentation
 - Twitter Data Archive Documentation
 - Instagram Data Download Documentation
 - Medium Export Documentation

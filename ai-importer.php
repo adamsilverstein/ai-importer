@@ -4,7 +4,7 @@
  * Plugin URI:        https://github.com/adamsilverstein/ai-importer
  * Description:       Import content from social media platforms into WordPress using AI-powered analysis and mapping.
  * Version:           0.1.0
- * Requires at least: 6.4
+ * Requires at least: 7.0
  * Requires PHP:      8.1
  * Author:            Adam Silverstein
  * Author URI:        https://developer.wordpress.org
@@ -66,9 +66,9 @@ add_action( 'plugins_loaded', __NAMESPACE__ . '\\init' );
 function check_dependencies(): bool {
 	$missing = array();
 
-	// Check for AI Experiments plugin.
-	if ( ! class_exists( 'WP_AI_Client' ) && ! function_exists( 'ai_get_client' ) ) {
-		$missing[] = 'AI Experiments';
+	// WordPress 7.0+ includes native AI capabilities via wp_get_ai_client().
+	if ( ! function_exists( 'wp_get_ai_client' ) ) {
+		$missing[] = __( 'WordPress 7.0+ with native AI support', 'ai-importer' );
 	}
 
 	if ( ! empty( $missing ) ) {
@@ -76,8 +76,8 @@ function check_dependencies(): bool {
 			'admin_notices',
 			function () use ( $missing ) {
 				$message = sprintf(
-					/* translators: %s: List of missing plugins */
-					__( 'AI Importer requires the following plugins: %s', 'ai-importer' ),
+					/* translators: %s: List of missing dependencies */
+					__( 'AI Importer requires the following: %s', 'ai-importer' ),
 					implode( ', ', $missing )
 				);
 				printf(
@@ -109,10 +109,10 @@ function activate(): void {
 	}
 
 	global $wp_version;
-	if ( version_compare( $wp_version, '6.4', '<' ) ) {
+	if ( version_compare( $wp_version, '7.0', '<' ) ) {
 		deactivate_plugins( AI_IMPORTER_PLUGIN_BASENAME );
 		wp_die(
-			esc_html__( 'AI Importer requires WordPress 6.4 or higher.', 'ai-importer' ),
+			esc_html__( 'AI Importer requires WordPress 7.0 or higher.', 'ai-importer' ),
 			'Plugin Activation Error',
 			array( 'back_link' => true )
 		);

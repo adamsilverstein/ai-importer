@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AI Importer is a WordPress plugin that enables users to migrate content from social media platforms (Twitter/X, Instagram, Medium, Blogger, etc.) into WordPress. It uses AI-powered analysis via the WordPress AI Experiments plugin to intelligently map and transform content.
+AI Importer is a WordPress plugin that enables users to migrate content from social media platforms (Twitter/X, Instagram, Medium, Blogger, etc.) into WordPress. It uses AI-powered analysis via the native WordPress AI capabilities (introduced in WordPress 7.0) to intelligently map and transform content.
 
 ## Development Commands
 
@@ -47,7 +47,7 @@ npm run test:e2e
 
 - **Schema Analyzer** (`/includes/schema/`): Introspects destination WordPress site structure (post types, taxonomies, custom fields)
 
-- **AI Service** (`/includes/ai/`): Wrapper around WP_AI_Client for migration-specific AI tasks (content analysis, mapping suggestions, enhancements)
+- **AI Service** (`/includes/ai/`): Wrapper around WordPress native AI client (`wp_get_ai_client()`) for migration-specific AI tasks (content analysis, mapping suggestions, enhancements)
 
 - **Import Processor** (`/includes/processor/`): Handles WordPress content creation via Action Scheduler for background processing
 
@@ -81,8 +81,8 @@ Options keys:
 
 ## Key Dependencies
 
-- WordPress 6.4+, PHP 8.1+
-- AI Experiments plugin (`ai`) - provides WP_AI_Client
+- WordPress 7.0+, PHP 8.1+
+- WordPress native AI client (`wp_get_ai_client()`) - bundled in WordPress 7.0+
 - Action Scheduler for background jobs
 - `@wordpress/scripts` for asset building
 
