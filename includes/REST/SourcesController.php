@@ -221,7 +221,21 @@ class SourcesController extends WP_REST_Controller {
 		$credentials   = array();
 		$uploaded_file = null;
 
-		// Handle file uploads.
+		// Merge body and JSON params first.
+		$body_params = $request->get_body_params();
+
+		if ( ! empty( $body_params ) ) {
+			$credentials = array_merge( $credentials, $body_params );
+		}
+
+		$json_params = $request->get_json_params();
+
+		if ( ! empty( $json_params ) ) {
+			$credentials = array_merge( $credentials, $json_params );
+		}
+
+		// Handle file uploads last so the trusted path cannot be
+		// overwritten by user-supplied body/JSON params.
 		$files = $request->get_file_params();
 
 		if ( ! empty( $files['file'] ) ) {
@@ -233,20 +247,6 @@ class SourcesController extends WP_REST_Controller {
 
 			$uploaded_file       = $upload;
 			$credentials['file'] = $upload;
-		}
-
-		// Merge any additional body params as credentials.
-		$body_params = $request->get_body_params();
-
-		if ( ! empty( $body_params ) ) {
-			$credentials = array_merge( $credentials, $body_params );
-		}
-
-		// Also check JSON body.
-		$json_params = $request->get_json_params();
-
-		if ( ! empty( $json_params ) ) {
-			$credentials = array_merge( $credentials, $json_params );
 		}
 
 		$success = $adapter->authenticate( $credentials );
@@ -399,18 +399,16 @@ class SourcesController extends WP_REST_Controller {
 		$upload_dir = wp_upload_dir();
 		$dest_dir   = $upload_dir['basedir'] . '/ai-importer-tmp';
 
-		if ( ! file_exists( $dest_dir ) ) {
-			if ( ! wp_mkdir_p( $dest_dir ) ) {
-				return new WP_Error(
-					'upload_error',
-					__( 'Failed to create upload directory.', 'ai-importer' ),
-					array( 'status' => 500 )
-				);
-			}
-
-			// Protect the directory from direct web access.
-			$this->protect_directory( $dest_dir );
+		if ( ! file_exists( $dest_dir ) && ! wp_mkdir_p( $dest_dir ) ) {
+			return new WP_Error(
+				'upload_error',
+				__( 'Failed to create upload directory.', 'ai-importer' ),
+				array( 'status' => 500 )
+			);
 		}
+
+		// Ensure the directory is protected from direct web access.
+		$this->protect_directory( $dest_dir );
 
 		$filename = wp_unique_filename( $dest_dir, sanitize_file_name( $file['name'] ) );
 		$dest     = $dest_dir . '/' . $filename;
