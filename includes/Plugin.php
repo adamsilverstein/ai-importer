@@ -8,6 +8,7 @@
 namespace AI_Importer;
 
 use AI_Importer\Adapters\AdapterRegistry;
+use AI_Importer\Processor\ImportProcessor;
 
 /**
  * Plugin class.
@@ -72,6 +73,10 @@ class Plugin {
 		 * @param AdapterRegistry $registry The adapter registry instance.
 		 */
 		do_action( 'ai_importer_register_adapters', $this->adapter_registry );
+
+		// Initialize import processor (must run on all requests for Action Scheduler).
+		$processor = new ImportProcessor();
+		$processor->init();
 
 		// Initialize admin.
 		if ( is_admin() ) {
