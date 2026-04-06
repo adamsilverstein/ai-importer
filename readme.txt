@@ -1,8 +1,8 @@
 === AI Importer ===
 Contributors: adamsilverstein
 Tags: import, migration, social media, twitter, instagram, medium, ai
-Requires at least: 6.4
-Tested up to: 6.7
+Requires at least: 7.0
+Tested up to: 7.0
 Requires PHP: 8.1
 Stable tag: 0.1.0
 License: GPLv2 or later
@@ -31,26 +31,25 @@ AI Importer enables you to migrate your content from any major social media plat
 
 **Requirements:**
 
-* WordPress 6.4 or higher
+* WordPress 7.0 or higher
 * PHP 8.1 or higher
-* AI Experiments plugin (for AI features)
 
 == Installation ==
 
 1. Upload the plugin files to `/wp-content/plugins/ai-importer`, or install through the WordPress plugins screen.
 2. Activate the plugin through the 'Plugins' screen in WordPress.
-3. Install and configure the AI Experiments plugin with your preferred AI provider.
+3. Configure your preferred AI provider in WordPress Settings > AI.
 4. Navigate to AI Importer in the admin menu to start importing content.
 
 == Frequently Asked Questions ==
 
 = What AI providers are supported? =
 
-AI Importer uses the AI Experiments plugin for AI functionality. Supported providers include Anthropic (Claude), OpenAI (GPT-4), and Google (Gemini).
+AI Importer uses the native AI capabilities built into WordPress 7.0+. Supported providers include Anthropic (Claude), OpenAI (GPT-4), and Google (Gemini).
 
 = Do I need an AI API key? =
 
-Yes, you need an API key from a supported AI provider (Anthropic, OpenAI, or Google) configured in the AI Experiments plugin.
+Yes, you need an API key from a supported AI provider (Anthropic, OpenAI, or Google) configured in WordPress Settings > AI.
 
 = Can I import without using AI features? =
 
