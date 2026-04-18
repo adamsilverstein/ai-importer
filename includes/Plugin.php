@@ -8,6 +8,7 @@
 namespace AI_Importer;
 
 use AI_Importer\Adapters\AdapterRegistry;
+use AI_Importer\Adapters\TwitterAdapter;
 use AI_Importer\Processor\ImportProcessor;
 use AI_Importer\REST\ImportsController;
 use AI_Importer\REST\SourcesController;
@@ -65,6 +66,9 @@ class Plugin {
 	public function init(): void {
 		// Initialize adapter registry.
 		$this->adapter_registry = AdapterRegistry::get_instance();
+
+		// Register built-in adapters.
+		$this->adapter_registry->register( new TwitterAdapter() );
 
 		/**
 		 * Fires when adapters should be registered.
