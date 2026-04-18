@@ -14,6 +14,11 @@ define( 'AI_IMPORTER_PLUGIN_FILE', dirname( __DIR__ ) . '/ai-importer.php' );
 define( 'AI_IMPORTER_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
 define( 'AI_IMPORTER_PLUGIN_URL', 'https://example.com/wp-content/plugins/ai-importer/' );
 
+// Define WordPress constants used by the plugin.
+if ( ! defined( 'ABSPATH' ) ) {
+	define( 'ABSPATH', '/tmp/wordpress/' );
+}
+
 /**
  * Stub WP_Error class for testing.
  */
@@ -110,5 +115,127 @@ if ( ! class_exists( 'WP_Error' ) ) {
 			}
 			return $this->error_data[ $code ] ?? null;
 		}
+	}
+}
+
+/**
+ * Stub WP_REST_Server class for testing.
+ */
+if ( ! class_exists( 'WP_REST_Server' ) ) {
+	class WP_REST_Server {
+		const READABLE   = 'GET';
+		const CREATABLE  = 'POST';
+		const EDITABLE   = 'PUT, PATCH';
+		const DELETABLE  = 'DELETE';
+		const ALLMETHODS  = 'GET, POST, PUT, PATCH, DELETE';
+	}
+}
+
+/**
+ * Stub WP_REST_Request class for testing.
+ */
+if ( ! class_exists( 'WP_REST_Request' ) ) {
+	class WP_REST_Request implements \ArrayAccess {
+		private $method;
+		private $route;
+		private $params      = array();
+		private $body_params  = array();
+		private $json_params  = array();
+		private $file_params  = array();
+		private $query_params = array();
+
+		public function __construct( $method = 'GET', $route = '' ) {
+			$this->method = $method;
+			$this->route  = $route;
+		}
+
+		public function get_param( $key ) {
+			return $this->params[ $key ] ?? $this->body_params[ $key ] ?? $this->query_params[ $key ] ?? null;
+		}
+
+		public function set_param( $key, $value ) {
+			$this->params[ $key ] = $value;
+		}
+
+		public function get_body_params() {
+			return $this->body_params;
+		}
+
+		public function set_body_params( $params ) {
+			$this->body_params = $params;
+			// Also set as regular params for get_param access.
+			$this->params = array_merge( $this->params, $params );
+		}
+
+		public function get_json_params() {
+			return $this->json_params;
+		}
+
+		public function get_file_params() {
+			return $this->file_params;
+		}
+
+		public function set_file_params( $params ) {
+			$this->file_params = $params;
+		}
+
+		public function get_query_params() {
+			return $this->query_params;
+		}
+
+		public function set_query_params( $params ) {
+			$this->query_params = $params;
+		}
+
+		public function offsetExists( $offset ): bool {
+			return isset( $this->params[ $offset ] );
+		}
+
+		public function offsetGet( $offset ): mixed {
+			return $this->params[ $offset ] ?? null;
+		}
+
+		public function offsetSet( $offset, $value ): void {
+			$this->params[ $offset ] = $value;
+		}
+
+		public function offsetUnset( $offset ): void {
+			unset( $this->params[ $offset ] );
+		}
+	}
+}
+
+/**
+ * Stub WP_REST_Response class for testing.
+ */
+if ( ! class_exists( 'WP_REST_Response' ) ) {
+	class WP_REST_Response {
+		private $data;
+		private $status;
+		private $headers = array();
+
+		public function __construct( $data = null, $status = 200, $headers = array() ) {
+			$this->data    = $data;
+			$this->status  = $status;
+			$this->headers = $headers;
+		}
+
+		public function get_data() {
+			return $this->data;
+		}
+
+		public function get_status() {
+			return $this->status;
+		}
+	}
+}
+
+/**
+ * Stub WP_REST_Controller class for testing.
+ */
+if ( ! class_exists( 'WP_REST_Controller' ) ) {
+	abstract class WP_REST_Controller {
+		protected $namespace;
+		protected $rest_base;
 	}
 }

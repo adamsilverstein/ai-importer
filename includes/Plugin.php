@@ -9,6 +9,8 @@ namespace AI_Importer;
 
 use AI_Importer\Adapters\AdapterRegistry;
 use AI_Importer\Processor\ImportProcessor;
+use AI_Importer\REST\ImportsController;
+use AI_Importer\REST\SourcesController;
 
 /**
  * Plugin class.
@@ -94,7 +96,11 @@ class Plugin {
 	 * @return void
 	 */
 	public function register_rest_routes(): void {
-		// REST routes will be added in future issues.
+		$sources_controller = new SourcesController();
+		$sources_controller->register_routes();
+
+		$imports_controller = new ImportsController();
+		$imports_controller->register_routes();
 	}
 
 	/**
