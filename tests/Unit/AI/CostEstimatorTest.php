@@ -139,4 +139,28 @@ class CostEstimatorTest extends TestCase {
 		$this->assertArrayNotHasKey( 'claude_sonnet', $result['cost_by_provider'] );
 		$this->assertEqualsWithDelta( 2.0, $result['cost_by_provider']['custom_provider'], 0.001 );
 	}
+
+	/**
+	 * Test invalid rate values from the filter are skipped instead of crashing.
+	 *
+	 * @return void
+	 */
+	public function test_invalid_filter_rates_are_skipped(): void {
+		Filters\expectApplied( 'ai_importer_cost_rates' )
+			->once()
+			->andReturn(
+				array(
+					'good'     => 5.0,
+					'string'   => 'free', // Non-numeric — should be skipped, not crash.
+					'negative' => -1.0,   // Negative — should be skipped.
+				)
+			);
+
+		$estimator = new CostEstimator();
+		$result    = $estimator->estimate( array( 'title_generation' => 10000 ) );
+
+		$this->assertArrayHasKey( 'good', $result['cost_by_provider'] );
+		$this->assertArrayNotHasKey( 'string', $result['cost_by_provider'] );
+		$this->assertArrayNotHasKey( 'negative', $result['cost_by_provider'] );
+	}
 }

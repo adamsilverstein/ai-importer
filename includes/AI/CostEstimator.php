@@ -104,7 +104,14 @@ class CostEstimator {
 		$rates            = $this->get_rates();
 		$cost_by_provider = array();
 		foreach ( $rates as $provider => $rate_per_million ) {
-			$cost_by_provider[ $provider ] = round( ( $total_tokens / 1_000_000 ) * $rate_per_million, 2 );
+			if ( ! is_numeric( $rate_per_million ) ) {
+				continue;
+			}
+			$rate = (float) $rate_per_million;
+			if ( $rate < 0 ) {
+				continue;
+			}
+			$cost_by_provider[ $provider ] = round( ( $total_tokens / 1_000_000 ) * $rate, 2 );
 		}
 
 		return array(
