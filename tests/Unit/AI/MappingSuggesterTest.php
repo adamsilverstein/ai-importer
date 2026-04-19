@@ -217,4 +217,28 @@ class MappingSuggesterTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $result );
 		$this->assertContains( 'ai_mapping_malformed', $result->get_error_codes() );
 	}
+
+	/**
+	 * Test suggest rejects responses where required fields have the wrong type.
+	 *
+	 * @return void
+	 */
+	public function test_suggest_rejects_wrong_field_types(): void {
+		$service = $this->createMock( AIService::class );
+		$service->method( 'generate_structured' )->willReturn(
+			array(
+				'post_type_mappings'      => array(),
+				'taxonomy_mappings'       => array(),
+				'content_transformations' => array(),
+				'summary'                 => array( 'wrong', 'type' ), // Should be string.
+			)
+		);
+
+		$suggester = new MappingSuggester( $service );
+
+		$result = $suggester->suggest( $this->sample_analysis(), $this->sample_schema() );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertContains( 'ai_mapping_malformed', $result->get_error_codes() );
+	}
 }

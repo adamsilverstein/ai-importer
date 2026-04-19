@@ -57,6 +57,9 @@ class MappingSuggester {
 		}
 
 		$prompt = $this->build_prompt( $analysis, $site_schema );
+		if ( is_wp_error( $prompt ) ) {
+			return $prompt;
+		}
 		$schema = $this->build_schema();
 
 		$response = $this->service->generate_structured( $prompt, $schema );
@@ -65,8 +68,13 @@ class MappingSuggester {
 			return $response;
 		}
 
-		$required = array( 'post_type_mappings', 'taxonomy_mappings', 'content_transformations', 'summary' );
-		foreach ( $required as $field ) {
+		$required = array(
+			'post_type_mappings'      => 'array',
+			'taxonomy_mappings'       => 'array',
+			'content_transformations' => 'array',
+			'summary'                 => 'string',
+		);
+		foreach ( $required as $field => $type ) {
 			if ( ! array_key_exists( $field, $response ) ) {
 				return new WP_Error(
 					'ai_mapping_malformed',
@@ -74,6 +82,20 @@ class MappingSuggester {
 						/* translators: %s: missing field name */
 						__( 'AI mapping response is missing required field: %s.', 'ai-importer' ),
 						$field
+					),
+					array( 'response' => $response )
+				);
+			}
+			if ( ( 'array' === $type && ! is_array( $response[ $field ] ) )
+				|| ( 'string' === $type && ! is_string( $response[ $field ] ) )
+			) {
+				return new WP_Error(
+					'ai_mapping_malformed',
+					sprintf(
+						/* translators: 1: field name, 2: expected type */
+						__( 'AI mapping response field "%1$s" must be of type %2$s.', 'ai-importer' ),
+						$field,
+						$type
 					),
 					array( 'response' => $response )
 				);
@@ -88,16 +110,23 @@ class MappingSuggester {
 	 *
 	 * @param array<string, mixed> $analysis    Content analysis.
 	 * @param array<string, mixed> $site_schema Destination schema summary.
-	 * @return string Prompt.
+	 * @return string|WP_Error Prompt, or WP_Error if either payload cannot be JSON-encoded.
 	 */
-	private function build_prompt( array $analysis, array $site_schema ): string {
+	private function build_prompt( array $analysis, array $site_schema ) {
 		$analysis_json = wp_json_encode( $analysis );
-		$schema_json   = wp_json_encode( $site_schema );
 		if ( false === $analysis_json ) {
-			$analysis_json = '{}';
+			return new WP_Error(
+				'ai_mapping_prompt_encode_failed',
+				__( 'Unable to encode content analysis for AI mapping prompt.', 'ai-importer' )
+			);
 		}
+
+		$schema_json = wp_json_encode( $site_schema );
 		if ( false === $schema_json ) {
-			$schema_json = '{}';
+			return new WP_Error(
+				'ai_mapping_prompt_encode_failed',
+				__( 'Unable to encode destination site schema for AI mapping prompt.', 'ai-importer' )
+			);
 		}
 
 		return (
