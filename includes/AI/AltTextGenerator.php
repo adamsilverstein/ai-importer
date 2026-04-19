@@ -57,7 +57,11 @@ class AltTextGenerator {
 			);
 		}
 
-		if ( false === filter_var( $image_url, FILTER_VALIDATE_URL ) ) {
+		$scheme = wp_parse_url( $image_url, PHP_URL_SCHEME );
+		if ( false === filter_var( $image_url, FILTER_VALIDATE_URL )
+			|| ! is_string( $scheme )
+			|| ! in_array( strtolower( $scheme ), array( 'http', 'https' ), true )
+		) {
 			return new WP_Error(
 				'ai_alt_text_invalid_url',
 				__( 'A valid http(s) URL is required to generate alt text.', 'ai-importer' )
@@ -87,6 +91,21 @@ class AltTextGenerator {
 			return new WP_Error(
 				'ai_alt_text_empty',
 				__( 'AI returned an empty alt text.', 'ai-importer' )
+			);
+		}
+
+		if ( mb_strlen( $alt ) > self::MAX_LENGTH ) {
+			return new WP_Error(
+				'ai_alt_text_too_long',
+				sprintf(
+					/* translators: %d: maximum alt text length. */
+					__( 'AI returned alt text longer than %d characters.', 'ai-importer' ),
+					self::MAX_LENGTH
+				),
+				array(
+					'max_length' => self::MAX_LENGTH,
+					'length'     => mb_strlen( $alt ),
+				)
 			);
 		}
 
