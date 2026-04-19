@@ -70,13 +70,13 @@ class ContentAnalyzer {
 		}
 
 		$required = array(
-			'content_types',
-			'top_topics',
-			'writing_style',
-			'suggested_categories',
-			'high_value_content',
+			'content_types'        => 'array',
+			'top_topics'           => 'array',
+			'writing_style'        => 'string',
+			'suggested_categories' => 'array',
+			'high_value_content'   => 'array',
 		);
-		foreach ( $required as $field ) {
+		foreach ( $required as $field => $type ) {
 			if ( ! array_key_exists( $field, $response ) ) {
 				return new WP_Error(
 					'ai_analyze_malformed',
@@ -84,6 +84,20 @@ class ContentAnalyzer {
 						/* translators: %s: missing field name */
 						__( 'AI analysis response is missing required field: %s.', 'ai-importer' ),
 						$field
+					),
+					array( 'response' => $response )
+				);
+			}
+			if ( ( 'array' === $type && ! is_array( $response[ $field ] ) )
+				|| ( 'string' === $type && ! is_string( $response[ $field ] ) )
+			) {
+				return new WP_Error(
+					'ai_analyze_malformed',
+					sprintf(
+						/* translators: 1: field name, 2: expected type */
+						__( 'AI analysis response field "%1$s" must be of type %2$s.', 'ai-importer' ),
+						$field,
+						$type
 					),
 					array( 'response' => $response )
 				);

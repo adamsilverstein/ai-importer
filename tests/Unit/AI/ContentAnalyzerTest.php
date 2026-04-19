@@ -170,6 +170,31 @@ class ContentAnalyzerTest extends TestCase {
 	}
 
 	/**
+	 * Test analyze rejects responses where required fields have the wrong type.
+	 *
+	 * @return void
+	 */
+	public function test_analyze_rejects_wrong_field_types(): void {
+		$service = $this->createMock( AIService::class );
+		$service->method( 'generate_structured' )->willReturn(
+			array(
+				'content_types'        => array(),
+				'top_topics'           => 'wordpress, javascript', // Should be array.
+				'writing_style'        => 'technical',
+				'suggested_categories' => array(),
+				'high_value_content'   => array(),
+			)
+		);
+
+		$analyzer = new ContentAnalyzer( $service );
+
+		$result = $analyzer->analyze( $this->sample_items() );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertContains( 'ai_analyze_malformed', $result->get_error_codes() );
+	}
+
+	/**
 	 * Test analyze respects the sample_size option by truncating items in the prompt.
 	 *
 	 * @return void
@@ -189,7 +214,7 @@ class ContentAnalyzerTest extends TestCase {
 		$captured_prompt = null;
 		$service         = $this->createMock( AIService::class );
 		$service->method( 'generate_structured' )->willReturnCallback(
-			function ( $prompt, $schema ) use ( &$captured_prompt ) {
+			function ( $prompt, $_schema ) use ( &$captured_prompt ) {
 				$captured_prompt = $prompt;
 
 				return array(
