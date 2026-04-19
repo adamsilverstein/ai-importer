@@ -24,7 +24,9 @@ class AIService {
 	 * @return bool True if wp_get_ai_client() exists and returns a usable client.
 	 */
 	public function is_available(): bool {
-		return ! is_wp_error( $this->get_client() ) && null !== $this->get_client();
+		$client = $this->get_client();
+
+		return null !== $client && ! is_wp_error( $client );
 	}
 
 	/**
