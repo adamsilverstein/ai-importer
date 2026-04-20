@@ -1,6 +1,6 @@
 <?php
 /**
- * Alt text generator.
+ * Image alt text generator.
  *
  * @package AI_Importer\AI
  */
@@ -10,21 +10,22 @@ namespace AI_Importer\AI;
 use WP_Error;
 
 /**
- * Generates accessibility alt text for an image via AIService.
+ * Proposes descriptive alt text for an image via AIService.
  *
- * The AI is asked to produce a short, descriptive alt text for the image
- * at the given URL. Optional context (e.g. the surrounding post text)
- * improves relevance when the image alone is ambiguous.
+ * Intended for accessibility: when a source item ships an image without
+ * alt text, this generator asks the model to describe the image based
+ * on its URL (and optional surrounding post context) so the resulting
+ * WordPress media item meets accessibility requirements.
  */
 class AltTextGenerator {
 
 	/**
 	 * Maximum alt text length in characters.
 	 *
-	 * Screen readers start truncating around 125 characters; the prompt asks
-	 * the model to stay under this.
+	 * Screen readers and SEO guides commonly recommend staying under
+	 * ~125 characters; we allow a little headroom.
 	 */
-	private const MAX_LENGTH = 125;
+	private const MAX_LENGTH = 150;
 
 	/**
 	 * AI service.
@@ -43,33 +44,31 @@ class AltTextGenerator {
 	}
 
 	/**
-	 * Generate alt text for an image URL.
+	 * Generate alt text for the image at the given URL.
 	 *
-	 * @param string               $image_url HTTP(S) URL of the image.
-	 * @param array<string, mixed> $options   Options: 'context' (string) for surrounding text.
+	 * @param string               $url     Absolute http(s) image URL.
+	 * @param array<string, mixed> $options Options: 'context' (string) surrounding post context.
 	 * @return string|WP_Error Alt text or error.
 	 */
-	public function generate( string $image_url, array $options = array() ) {
-		if ( '' === trim( $image_url ) ) {
+	public function generate( string $url, array $options = array() ) {
+		$url = trim( $url );
+
+		if ( '' === $url ) {
 			return new WP_Error(
 				'ai_alt_text_empty_url',
-				__( 'Image URL is required to generate alt text.', 'ai-importer' )
+				__( 'An image URL is required to generate alt text.', 'ai-importer' )
 			);
 		}
 
-		$scheme = wp_parse_url( $image_url, PHP_URL_SCHEME );
-		if ( false === filter_var( $image_url, FILTER_VALIDATE_URL )
-			|| ! is_string( $scheme )
-			|| ! in_array( strtolower( $scheme ), array( 'http', 'https' ), true )
-		) {
+		if ( ! $this->is_valid_http_url( $url ) ) {
 			return new WP_Error(
 				'ai_alt_text_invalid_url',
-				__( 'A valid http(s) URL is required to generate alt text.', 'ai-importer' )
+				__( 'Image URL must be an absolute http(s) URL.', 'ai-importer' )
 			);
 		}
 
 		$context = isset( $options['context'] ) ? (string) $options['context'] : '';
-		$prompt  = $this->build_prompt( $image_url, $context );
+		$prompt  = $this->build_prompt( $url, $context );
 		$schema  = $this->build_schema();
 
 		$response = $this->service->generate_structured( $prompt, $schema );
@@ -90,7 +89,7 @@ class AltTextGenerator {
 		if ( '' === $alt ) {
 			return new WP_Error(
 				'ai_alt_text_empty',
-				__( 'AI returned an empty alt text.', 'ai-importer' )
+				__( 'AI returned empty alt text.', 'ai-importer' )
 			);
 		}
 
@@ -113,22 +112,46 @@ class AltTextGenerator {
 	}
 
 	/**
-	 * Build the alt-text prompt.
+	 * Validate that $url is an absolute http(s) URL.
 	 *
-	 * @param string $image_url Image URL to describe.
-	 * @param string $context   Surrounding content, if any.
+	 * @param string $url URL to validate.
+	 * @return bool True when valid.
+	 */
+	private function is_valid_http_url( string $url ): bool {
+		$parts = wp_parse_url( $url );
+
+		if ( ! is_array( $parts ) ) {
+			return false;
+		}
+
+		if ( empty( $parts['scheme'] ) || empty( $parts['host'] ) ) {
+			return false;
+		}
+
+		$scheme = strtolower( (string) $parts['scheme'] );
+
+		return in_array( $scheme, array( 'http', 'https' ), true );
+	}
+
+	/**
+	 * Build the prompt for alt text generation.
+	 *
+	 * @param string $url     Image URL.
+	 * @param string $context Optional surrounding post context.
 	 * @return string Prompt.
 	 */
-	private function build_prompt( string $image_url, string $context ): string {
+	private function build_prompt( string $url, string $context ): string {
 		$prompt = sprintf(
-			'Generate concise accessibility alt text (under %d characters) for the image at %s. '
-			. 'Describe what a sighted viewer would see; do not start with "Image of" or "Picture of".',
-			self::MAX_LENGTH,
-			$image_url
+			'Write a concise, descriptive alt text (under %d characters) for the image at the URL below. '
+			. 'Describe what is visible in plain language suitable for a screen reader. '
+			. 'Do not prefix with "Image of" or "Picture of". Do not wrap the text in quotes.',
+			self::MAX_LENGTH
 		);
 
-		if ( '' !== $context ) {
-			$prompt .= "\n\nSurrounding context (may help disambiguate, but describe the image, not the context):\n" . $context;
+		$prompt .= "\n\nImage URL: " . $url;
+
+		if ( '' !== trim( $context ) ) {
+			$prompt .= "\n\nSurrounding post context:\n" . $context;
 		}
 
 		return $prompt;
@@ -145,7 +168,7 @@ class AltTextGenerator {
 			'properties' => array(
 				'alt_text' => array(
 					'type'        => 'string',
-					'description' => 'Short, descriptive alt text for the image.',
+					'description' => 'Concise, descriptive alt text for the image.',
 					'maxLength'   => self::MAX_LENGTH,
 				),
 			),
