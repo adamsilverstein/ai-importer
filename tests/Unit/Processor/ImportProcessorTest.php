@@ -15,6 +15,7 @@ use AI_Importer\Normalizer\ContentNormalizer;
 use AI_Importer\Normalizer\NormalizedItem;
 use AI_Importer\Processor\ContentCreator;
 use AI_Importer\Processor\ImportProcessor;
+use AI_Importer\Processor\ItemEnhancer;
 use AI_Importer\Processor\MediaHandler;
 use AI_Importer\Schema\SettingsSchema;
 use AI_Importer\Tests\Unit\TestCase;
@@ -352,6 +353,38 @@ class ImportProcessorTest extends TestCase {
 		);
 
 		AdapterRegistry::get_instance()->register( $adapter );
+	}
+
+	/**
+	 * Test process_batch invokes the enhancer on every normalized item when supplied.
+	 *
+	 * @return void
+	 */
+	public function test_process_batch_invokes_enhancer_when_provided(): void {
+		$this->register_mock_adapter();
+
+		$creator = Mockery::mock( ContentCreator::class );
+		$creator->shouldReceive( 'create' )->andReturn( 200, 201 );
+
+		$media_handler = Mockery::mock( MediaHandler::class );
+		$media_handler->shouldReceive( 'process' )->andReturn( array() );
+
+		$normalizer = $this->create_mock_normalizer();
+
+		Filters\expectApplied( 'ai_importer_normalizers' )
+			->andReturn( array( 'twitter' => $normalizer ) );
+
+		$enhancer = Mockery::mock( ItemEnhancer::class );
+		$enhancer->shouldReceive( 'enhance' )->twice();
+
+		$this->store_batch( 'batch-1', 'processing', array( 'item-1', 'item-2' ) );
+
+		$processor = new ImportProcessor( $creator, $media_handler, $enhancer );
+		$processor->process_batch( 'batch-1' );
+
+		$batch = $this->options['ai_importer_batch_batch-1'];
+		$this->assertSame( 'completed', $batch['state'] );
+		$this->assertSame( 2, $batch['processed'] );
 	}
 
 	/**

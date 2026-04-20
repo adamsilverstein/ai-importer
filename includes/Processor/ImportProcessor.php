@@ -58,6 +58,13 @@ class ImportProcessor {
 	private MediaHandler $media_handler;
 
 	/**
+	 * Optional AI enhancer.
+	 *
+	 * @var ItemEnhancer|null
+	 */
+	private ?ItemEnhancer $enhancer;
+
+	/**
 	 * Registered normalizers keyed by adapter ID.
 	 *
 	 * @var array<string, ContentNormalizer>|null
@@ -69,10 +76,16 @@ class ImportProcessor {
 	 *
 	 * @param ContentCreator|null $creator       Content creator instance.
 	 * @param MediaHandler|null   $media_handler Media handler instance.
+	 * @param ItemEnhancer|null   $enhancer      Optional AI enhancer.
 	 */
-	public function __construct( ?ContentCreator $creator = null, ?MediaHandler $media_handler = null ) {
+	public function __construct(
+		?ContentCreator $creator = null,
+		?MediaHandler $media_handler = null,
+		?ItemEnhancer $enhancer = null
+	) {
 		$this->creator       = $creator ?? new ContentCreator();
 		$this->media_handler = $media_handler ?? new MediaHandler();
+		$this->enhancer      = $enhancer;
 	}
 
 	/**
@@ -188,6 +201,11 @@ class ImportProcessor {
 			try {
 				$raw_item   = $adapter->fetch_item( $item_id );
 				$normalized = $normalizer->normalize( $raw_item );
+
+				// Apply AI enhancements (non-fatal failures handled inside).
+				if ( null !== $this->enhancer ) {
+					$this->enhancer->enhance( $normalized );
+				}
 
 				// Sideload media (failures are non-fatal).
 				$media_errors = $this->media_handler->process( $normalized );
