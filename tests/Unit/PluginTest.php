@@ -33,6 +33,10 @@ class PluginTest extends TestCase {
 
 		// Reset the adapter registry so built-in adapters can re-register.
 		AdapterRegistry::get_instance()->reset();
+
+		// Ensure the AI client probe is inert so Plugin::init() doesn't
+		// construct an ItemEnhancer and call into an unstubbed provider.
+		Functions\when( 'wp_get_ai_client' )->justReturn( null );
 	}
 
 	/**

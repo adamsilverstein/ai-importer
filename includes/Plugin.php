@@ -9,7 +9,11 @@ namespace AI_Importer;
 
 use AI_Importer\Adapters\AdapterRegistry;
 use AI_Importer\Adapters\TwitterAdapter;
+use AI_Importer\AI\AIService;
+use AI_Importer\AI\MetaDescriptionGenerator;
+use AI_Importer\AI\TitleGenerator;
 use AI_Importer\Processor\ImportProcessor;
+use AI_Importer\Processor\ItemEnhancer;
 use AI_Importer\REST\ImportsController;
 use AI_Importer\REST\SourcesController;
 
@@ -81,7 +85,7 @@ class Plugin {
 		do_action( 'ai_importer_register_adapters', $this->adapter_registry );
 
 		// Initialize import processor (must run on all requests for Action Scheduler).
-		$processor = new ImportProcessor();
+		$processor = new ImportProcessor( null, null, $this->build_item_enhancer() );
 		$processor->init();
 
 		// Initialize admin.
@@ -123,5 +127,39 @@ class Plugin {
 	 */
 	public function get_adapter_registry(): ?AdapterRegistry {
 		return $this->adapter_registry;
+	}
+
+	/**
+	 * Construct the AI-backed item enhancer when a provider is available.
+	 *
+	 * Returns null when no WP AI client is configured so the processor
+	 * runs without enhancement instead of emitting per-item errors.
+	 *
+	 * @return ItemEnhancer|null
+	 */
+	private function build_item_enhancer(): ?ItemEnhancer {
+		$service = new AIService();
+
+		if ( ! $service->is_available() ) {
+			$enhancer = null;
+		} else {
+			$enhancer = new ItemEnhancer(
+				new TitleGenerator( $service ),
+				new MetaDescriptionGenerator( $service )
+			);
+		}
+
+		/**
+		 * Filters the item enhancer used by the import processor.
+		 *
+		 * Return null to disable AI enhancements entirely. Return a custom
+		 * ItemEnhancer instance to override title and meta description flags
+		 * or to inject alternative generators.
+		 *
+		 * @param ItemEnhancer|null $enhancer Default enhancer (null when AI is unavailable).
+		 */
+		$filtered = apply_filters( 'ai_importer_item_enhancer', $enhancer );
+
+		return $filtered instanceof ItemEnhancer ? $filtered : null;
 	}
 }
