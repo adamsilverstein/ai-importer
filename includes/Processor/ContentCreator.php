@@ -43,6 +43,11 @@ class ContentCreator {
 	public const META_IMPORTED_AT = '_ai_importer_imported_at';
 
 	/**
+	 * Post meta key for the AI-generated SEO meta description.
+	 */
+	public const META_SEO_DESCRIPTION = '_ai_importer_seo_description';
+
+	/**
 	 * Create a WordPress post from a normalized item.
 	 *
 	 * @param NormalizedItem $item     The normalized content.
@@ -90,6 +95,14 @@ class ContentCreator {
 
 		if ( $item->source_url ) {
 			update_post_meta( $post_id, self::META_ORIGINAL_URL, $item->source_url );
+		}
+
+		$seo_key = ItemEnhancer::META_KEY_SEO_DESCRIPTION;
+		if ( isset( $item->metadata[ $seo_key ] )
+			&& is_string( $item->metadata[ $seo_key ] )
+			&& '' !== $item->metadata[ $seo_key ]
+		) {
+			update_post_meta( $post_id, self::META_SEO_DESCRIPTION, $item->metadata[ $seo_key ] );
 		}
 
 		// Set tags from hashtags.
