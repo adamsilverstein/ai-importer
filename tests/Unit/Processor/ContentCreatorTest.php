@@ -11,6 +11,7 @@ use AI_Importer\Adapters\Manifest\ContentType;
 use AI_Importer\Normalizer\MediaReference;
 use AI_Importer\Normalizer\NormalizedItem;
 use AI_Importer\Processor\ContentCreator;
+use AI_Importer\Processor\ItemEnhancer;
 use AI_Importer\Tests\Unit\TestCase;
 use Brain\Monkey\Actions;
 use Brain\Monkey\Functions;
@@ -155,6 +156,66 @@ class ContentCreatorTest extends TestCase {
 		$this->creator->create( $this->make_item(), 'batch-abc' );
 
 		$this->assertBrainMonkeyExpectations();
+	}
+
+	/**
+	 * Test the SEO description meta is persisted when present on the item.
+	 *
+	 * @return void
+	 */
+	public function test_seo_description_meta_persisted(): void {
+		$item = $this->make_item(
+			array(
+				'metadata' => array(
+					ItemEnhancer::META_KEY_SEO_DESCRIPTION => 'Concise SEO-friendly summary that describes the post for SERPs.',
+				),
+			)
+		);
+
+		$this->creator->create( $item, 'batch-abc' );
+
+		$this->assertSame(
+			'Concise SEO-friendly summary that describes the post for SERPs.',
+			$this->post_meta[42][ ContentCreator::META_SEO_DESCRIPTION ]
+		);
+	}
+
+	/**
+	 * Test the SEO description meta is not set when absent.
+	 *
+	 * @return void
+	 */
+	public function test_seo_description_meta_not_set_when_absent(): void {
+		$item = $this->make_item();
+
+		$this->creator->create( $item, 'batch-abc' );
+
+		$this->assertArrayNotHasKey(
+			ContentCreator::META_SEO_DESCRIPTION,
+			$this->post_meta[42] ?? array()
+		);
+	}
+
+	/**
+	 * Test the SEO description meta is not set when empty string.
+	 *
+	 * @return void
+	 */
+	public function test_seo_description_meta_not_set_when_empty(): void {
+		$item = $this->make_item(
+			array(
+				'metadata' => array(
+					ItemEnhancer::META_KEY_SEO_DESCRIPTION => '',
+				),
+			)
+		);
+
+		$this->creator->create( $item, 'batch-abc' );
+
+		$this->assertArrayNotHasKey(
+			ContentCreator::META_SEO_DESCRIPTION,
+			$this->post_meta[42] ?? array()
+		);
 	}
 
 	/**
