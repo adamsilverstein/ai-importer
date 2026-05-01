@@ -2,7 +2,7 @@
  * Dashboard page component.
  */
 
-import { useState, useEffect } from '@wordpress/element';
+import { useDispatch, useSelect } from '@wordpress/data';
 import { __ } from '@wordpress/i18n';
 import {
 	Button,
@@ -11,7 +11,8 @@ import {
 	CardHeader,
 	Notice,
 } from '@wordpress/components';
-import { fetchSources, fetchImports } from '../api';
+
+import { STORE_NAME } from '../store';
 
 /**
  * Dashboard page showing overview and recent activity.
@@ -19,39 +20,31 @@ import { fetchSources, fetchImports } from '../api';
  * @return {JSX.Element} The dashboard page.
  */
 export default function Dashboard() {
-	const [ sources, setSources ] = useState( [] );
-	const [ imports, setImports ] = useState( [] );
-	const [ loading, setLoading ] = useState( true );
-	const [ error, setError ] = useState( null );
+	const { connectedSources, imports, loading, error } = useSelect(
+		( select ) => {
+			const store = select( STORE_NAME );
+			return {
+				connectedSources: store.getConnectedSources(),
+				imports: store.getImports(),
+				loading: store.isLoading(),
+				error: store.getError(),
+			};
+		},
+		[]
+	);
 
-	useEffect( () => {
-		const load = async () => {
-			const [ sourcesData, importsData ] = await Promise.all( [
-				fetchSources().catch( () => [] ),
-				fetchImports( 5 ).catch( () => [] ),
-			] );
-			setSources( sourcesData );
-			setImports( importsData );
-			setLoading( false );
-		};
-		load();
-	}, [] );
+	const { clearError } = useDispatch( STORE_NAME );
 
 	if ( loading ) {
 		return <p>{ __( 'Loading…', 'ai-importer' ) }</p>;
 	}
 
-	const connectedSources = sources.filter( ( s ) => s.is_authenticated );
 	const adminUrl = aiImporter?.adminUrl || '';
 
 	return (
 		<div className="ai-importer-dashboard">
 			{ error && (
-				<Notice
-					status="error"
-					isDismissible
-					onDismiss={ () => setError( null ) }
-				>
+				<Notice status="error" isDismissible onDismiss={ clearError }>
 					{ error }
 				</Notice>
 			) }
