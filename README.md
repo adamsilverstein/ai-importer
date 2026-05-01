@@ -14,7 +14,7 @@
 
 AI Importer is a universal content migration tool for WordPress. Connect a source (via OAuth, API key, or file upload), review an AI-generated mapping of how your content will land in WordPress, and run a background import that preserves dates, media, and relationships.
 
-The plugin uses the native WordPress AI capabilities introduced in WordPress 7.0 (`wp_get_ai_client()`) — meaning **you bring your own API key** (Anthropic, OpenAI, Google), and your content is never routed through a third-party service.
+The plugin uses the native WordPress AI capabilities introduced in WordPress 7.0 (`wp_get_ai_client()`). AI provider configuration is managed by core's [Connectors API](https://make.wordpress.org/core/2026/03/18/introducing-the-connectors-api-in-wordpress-7-0/) under **Settings → Connections** — AI Importer never asks for or stores API keys itself. Where AI requests are sent (and whether they leave your site at all) is determined entirely by the connector your administrator selects in core.
 
 ### Key capabilities
 
@@ -71,17 +71,19 @@ flowchart TB
         end
 
         AIClient["WordPress Native AI<br/>wp_get_ai_client()"]
+        Connections["Connectors API<br/>(Settings → Connections)"]
         WPCore["WordPress Core<br/>Posts · Taxonomies · Media"]
     end
 
-    Provider["AI Provider API<br/>(Anthropic, OpenAI, Google)"]
+    Provider["Configured AI Provider"]
 
     UI --> Core
     REST --> Core
     CLI --> Core
     Core --> Adapters
     AI --> AIClient
-    AIClient --> Provider
+    AIClient --> Connections
+    Connections --> Provider
     Processor --> WPCore
     Media --> WPCore
 ```
@@ -163,7 +165,7 @@ flowchart LR
 
 - WordPress **7.0 or later** (the plugin uses `wp_get_ai_client()` from core)
 - PHP **8.1 or later**
-- An API key for an AI provider configured in WordPress settings (Anthropic recommended)
+- An AI connection configured in **Settings → Connections** (the WordPress Connectors API handles provider choice, credentials, and routing)
 
 ### Install for development
 
