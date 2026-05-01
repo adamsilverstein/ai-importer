@@ -115,6 +115,21 @@ if ( ! class_exists( 'WP_Error' ) ) {
 			}
 			return $this->error_data[ $code ] ?? null;
 		}
+
+		/**
+		 * Add or replace data for an error code (matches WP 5.1+ behaviour).
+		 *
+		 * @param mixed  $data Error data.
+		 * @param string $code Error code; defaults to the first code.
+		 */
+		public function add_data( $data, $code = '' ) {
+			if ( empty( $code ) ) {
+				$code = $this->get_error_codes()[0] ?? '';
+			}
+			if ( '' !== $code ) {
+				$this->error_data[ $code ] = $data;
+			}
+		}
 	}
 }
 

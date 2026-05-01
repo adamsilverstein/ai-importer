@@ -8,6 +8,10 @@
 namespace AI_Importer\REST;
 
 use AI_Importer\Adapters\AdapterRegistry;
+use AI_Importer\AI\AIService;
+use AI_Importer\AI\ContentAnalyzer;
+use AI_Importer\AI\MappingSuggester;
+use AI_Importer\Schema\SiteSchemaAnalyzer;
 use WP_Error;
 use WP_REST_Controller;
 use WP_REST_Request;
@@ -18,11 +22,12 @@ use WP_REST_Server;
  * Handles REST API endpoints for managing source adapters.
  *
  * Endpoints:
- *   GET    /sources                     - List all adapters
- *   GET    /sources/{id}                - Get adapter details with schema
- *   POST   /sources/{id}/connect        - Authenticate an adapter
- *   POST   /sources/{id}/disconnect     - Disconnect an adapter
- *   GET    /sources/{id}/manifest       - Fetch content manifest
+ *   GET    /sources                              - List all adapters
+ *   GET    /sources/{id}                         - Get adapter details with schema
+ *   POST   /sources/{id}/connect                 - Authenticate an adapter
+ *   POST   /sources/{id}/disconnect              - Disconnect an adapter
+ *   GET    /sources/{id}/manifest                - Fetch content manifest
+ *   GET    /sources/{id}/mapping-suggestions     - Generate AI mapping suggestions
  */
 class SourcesController extends WP_REST_Controller {
 
@@ -39,6 +44,47 @@ class SourcesController extends WP_REST_Controller {
 	 * @var string
 	 */
 	protected $rest_base = 'sources';
+
+	/**
+	 * Content analyzer used for mapping suggestions.
+	 *
+	 * @var ContentAnalyzer|null
+	 */
+	private ?ContentAnalyzer $content_analyzer;
+
+	/**
+	 * Site schema analyzer used for mapping suggestions.
+	 *
+	 * @var SiteSchemaAnalyzer|null
+	 */
+	private ?SiteSchemaAnalyzer $site_schema_analyzer;
+
+	/**
+	 * Mapping suggester used for mapping suggestions.
+	 *
+	 * @var MappingSuggester|null
+	 */
+	private ?MappingSuggester $mapping_suggester;
+
+	/**
+	 * Constructor.
+	 *
+	 * Collaborators are injectable so tests can substitute mocks; in
+	 * production we lazily instantiate defaults that share an AIService.
+	 *
+	 * @param ContentAnalyzer|null    $content_analyzer     Content analyzer.
+	 * @param SiteSchemaAnalyzer|null $site_schema_analyzer Site schema analyzer.
+	 * @param MappingSuggester|null   $mapping_suggester    Mapping suggester.
+	 */
+	public function __construct(
+		?ContentAnalyzer $content_analyzer = null,
+		?SiteSchemaAnalyzer $site_schema_analyzer = null,
+		?MappingSuggester $mapping_suggester = null
+	) {
+		$this->content_analyzer     = $content_analyzer;
+		$this->site_schema_analyzer = $site_schema_analyzer;
+		$this->mapping_suggester    = $mapping_suggester;
+	}
 
 	/**
 	 * Register REST routes.
@@ -128,6 +174,30 @@ class SourcesController extends WP_REST_Controller {
 							'required'          => true,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
+						),
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/(?P<id>[a-zA-Z0-9_-]+)/mapping-suggestions',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_mapping_suggestions' ),
+					'permission_callback' => array( $this, 'get_items_permissions_check' ),
+					'args'                => array(
+						'id'          => array(
+							'required'          => true,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						),
+						'sample_size' => array(
+							'required'          => false,
+							'type'              => 'integer',
+							'sanitize_callback' => 'absint',
 						),
 					),
 				),
@@ -327,6 +397,130 @@ class SourcesController extends WP_REST_Controller {
 		}
 
 		return rest_ensure_response( $manifest->to_array() );
+	}
+
+	/**
+	 * Generate AI mapping suggestions for a connected source.
+	 *
+	 * Fetches the manifest, runs ContentAnalyzer over the items and
+	 * SiteSchemaAnalyzer over the destination site, then asks
+	 * MappingSuggester to recommend post-type, taxonomy, and content
+	 * mappings with reasoning.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function get_mapping_suggestions( $request ): WP_REST_Response|WP_Error {
+		$adapter = $this->get_adapter( $request['id'] );
+
+		if ( is_wp_error( $adapter ) ) {
+			return $adapter;
+		}
+
+		if ( ! $adapter->is_authenticated() ) {
+			return new WP_Error(
+				'not_authenticated',
+				__( 'This source is not connected. Please connect it first.', 'ai-importer' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		try {
+			$manifest = $adapter->fetch_manifest();
+		} catch ( \RuntimeException $e ) {
+			return new WP_Error(
+				'manifest_error',
+				$e->getMessage(),
+				array( 'status' => 500 )
+			);
+		}
+
+		$options = array();
+		// Forward the optional sample_size hint to the analyzer.
+		$sample_size = $request->get_param( 'sample_size' );
+		if ( null !== $sample_size && $sample_size > 0 ) {
+			$options['sample_size'] = (int) $sample_size;
+		}
+
+		$analysis = $this->get_content_analyzer()->analyze( array_values( $manifest->get_items() ), $options );
+
+		if ( is_wp_error( $analysis ) ) {
+			return $this->wrap_error_with_status( $analysis, 502 );
+		}
+
+		$site_schema = $this->get_site_schema_analyzer()->get_schema();
+		$suggestions = $this->get_mapping_suggester()->suggest( $analysis, $site_schema );
+
+		if ( is_wp_error( $suggestions ) ) {
+			return $this->wrap_error_with_status( $suggestions, 502 );
+		}
+
+		return rest_ensure_response(
+			array(
+				'source_id'   => $adapter->get_id(),
+				'analysis'    => $analysis,
+				'site_schema' => $site_schema,
+				'suggestions' => $suggestions,
+			)
+		);
+	}
+
+	/**
+	 * Lazily build the content analyzer, sharing an AIService.
+	 *
+	 * @return ContentAnalyzer
+	 */
+	private function get_content_analyzer(): ContentAnalyzer {
+		if ( null === $this->content_analyzer ) {
+			$this->content_analyzer = new ContentAnalyzer( new AIService() );
+		}
+
+		return $this->content_analyzer;
+	}
+
+	/**
+	 * Lazily build the site schema analyzer.
+	 *
+	 * @return SiteSchemaAnalyzer
+	 */
+	private function get_site_schema_analyzer(): SiteSchemaAnalyzer {
+		if ( null === $this->site_schema_analyzer ) {
+			$this->site_schema_analyzer = new SiteSchemaAnalyzer();
+		}
+
+		return $this->site_schema_analyzer;
+	}
+
+	/**
+	 * Lazily build the mapping suggester, sharing an AIService.
+	 *
+	 * @return MappingSuggester
+	 */
+	private function get_mapping_suggester(): MappingSuggester {
+		if ( null === $this->mapping_suggester ) {
+			$this->mapping_suggester = new MappingSuggester( new AIService() );
+		}
+
+		return $this->mapping_suggester;
+	}
+
+	/**
+	 * Ensure a WP_Error carries an HTTP status, defaulting to $status.
+	 *
+	 * @param WP_Error $error  Source error.
+	 * @param int      $status Default HTTP status if none is set.
+	 * @return WP_Error
+	 */
+	private function wrap_error_with_status( WP_Error $error, int $status ): WP_Error {
+		$data = $error->get_error_data();
+
+		if ( ! is_array( $data ) || empty( $data['status'] ) ) {
+			$data           = is_array( $data ) ? $data : array();
+			$data['status'] = $status;
+			$error->add_data( $data );
+		}
+
+		return $error;
 	}
 
 	/**
