@@ -104,15 +104,16 @@ class MediaHandler {
 			// phpcs:enable WordPress.Security.EscapeOutput.ExceptionNotEscaped
 		}
 
-		// Generate alt text via AI when missing for an image.
+		// Generate alt text via AI when missing for an image. URL validation
+		// (scheme, format) is handled by AltTextGenerator itself.
+		$source_url = trim( (string) $media->source_url );
 		if (
 			$media->is_image() &&
 			( null === $media->alt_text || '' === trim( (string) $media->alt_text ) ) &&
 			null !== $this->alt_text_generator &&
-			'' !== $media->source_url &&
-			0 === strpos( $media->source_url, 'http' )
+			'' !== $source_url
 		) {
-			$generated = $this->alt_text_generator->generate( $media->source_url );
+			$generated = $this->alt_text_generator->generate( $source_url );
 
 			if ( ! is_wp_error( $generated ) && '' !== trim( (string) $generated ) ) {
 				$media->alt_text = $generated;
@@ -122,7 +123,7 @@ class MediaHandler {
 				error_log(
 					sprintf(
 						'[ai-importer] alt text generation failed for %s: %s',
-						$media->source_url,
+						$source_url,
 						! empty( $messages ) ? $messages[0] : 'unknown error'
 					)
 				);
