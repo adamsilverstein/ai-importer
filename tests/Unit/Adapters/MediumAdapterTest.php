@@ -249,7 +249,6 @@ class MediumAdapterTest extends TestCase {
 
 		$manifest = $this->adapter->fetch_manifest();
 		$items    = $manifest->get_items();
-		$ids      = array_keys( $items );
 
 		// Find the "Hello WordPress" item ID.
 		$target_id = null;

@@ -218,7 +218,6 @@ class MediumAdapter extends AbstractAdapter {
 		return array(
 			ContentType::ARTICLE->value,
 			ContentType::POST->value,
-			ContentType::REPLY->value,
 		);
 	}
 
