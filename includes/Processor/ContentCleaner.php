@@ -90,12 +90,16 @@ class ContentCleaner {
 	/**
 	 * Remove standalone short-URL occurrences.
 	 *
+	 * Only matches bare URLs in text. The negative lookbehind preserves URLs
+	 * inside HTML attributes (e.g. `<a href="https://t.co/abc">`) — those are
+	 * intentional links, not platform cruft.
+	 *
 	 * @param string $content Content.
 	 * @return string Content with short URLs removed.
 	 */
 	private function strip_short_urls( string $content ): string {
 		$hosts   = array_map( 'preg_quote', self::SHORT_URL_HOSTS );
-		$pattern = '#https?://(?:' . implode( '|', $hosts ) . ')/[^\s<]*#i';
+		$pattern = '#(?<![\"\'=])https?://(?:' . implode( '|', $hosts ) . ')/[^\s<\"\']*#i';
 
 		return (string) preg_replace( $pattern, '', $content );
 	}

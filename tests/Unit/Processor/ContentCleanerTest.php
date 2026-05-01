@@ -150,6 +150,21 @@ class ContentCleanerTest extends TestCase {
 	}
 
 	/**
+	 * Test clean leaves short URLs inside HTML attributes alone.
+	 *
+	 * @return void
+	 */
+	public function test_clean_preserves_short_urls_inside_html_attributes(): void {
+		$cleaner = new ContentCleaner();
+
+		$double = '<p>Read <a href="https://t.co/abc123">this</a> now.</p>';
+		$single = "<p>Read <a href='https://t.co/abc123'>this</a> now.</p>";
+
+		$this->assertSame( $double, $cleaner->clean( $double ) );
+		$this->assertSame( $single, $cleaner->clean( $single ) );
+	}
+
+	/**
 	 * Test clean can be opted out of hashtag stripping.
 	 *
 	 * @return void
