@@ -34,7 +34,7 @@
 
 Unlike existing import tools that require manual configuration and produce inconsistent results, AI Importer uses large language models to understand content structure, suggest optimal mappings, and enhance imported content with features like alt text generation, thread stitching, and SEO optimization.
 
-The plugin follows a "bring your own key" model, leveraging the native WordPress AI capabilities introduced in WordPress 7.0 for LLM infrastructure, making it accessible to any WordPress user with an API key from providers like Anthropic or OpenAI.
+The plugin relies entirely on the native WordPress AI capabilities introduced in WordPress 7.0. AI provider configuration — including credentials, model selection, and routing — is owned by WordPress core via the Connectors API. The plugin contains no provider-specific logic and stores no API keys; users configure their preferred connection once in **Settings → Connections** and AI Importer uses it automatically.
 
 ---
 
@@ -99,7 +99,7 @@ WordPress powers 43% of the web. A universal, AI-powered import solution would:
    Use the migration as an opportunity to improve content: add alt text, generate SEO metadata, stitch threads into articles.
 
 5. **Respect User Autonomy**
-   Bring-your-own-key model. No vendor lock-in. Full control over AI provider choice and data handling.
+   AI provider choice and credential storage are owned by WordPress core's Connectors API. No vendor lock-in, no API keys handled by the plugin, full user control over provider and data handling.
 
 6. **WordPress-Native**
    Feel like a natural part of WordPress. Use blocks, respect theme structures, integrate with existing plugins.
@@ -185,7 +185,7 @@ The AI layer provides:
 - Granular selection of what to import
 - Rollback capability
 - Clear progress and error reporting
-- No data sent to third parties (except chosen AI provider)
+- No data sent to third parties (except the AI provider configured in WordPress Connections)
 
 ---
 
@@ -324,7 +324,7 @@ The AI layer provides:
 │                                                                      │
 │  ┌────────────────────────────────────────────────────────────────┐ │
 │  │            WordPress Native AI (wp_get_ai_client)             │ │
-│  │  • API Key Management    • Model Selection    • AI Client     │ │
+│  │  • Connectors API   • Model Selection   • AI Client            │ │
 │  └────────────────────────────────────────────────────────────────┘ │
 │                                    ▲                                 │
 │                                    │                                 │
@@ -368,8 +368,12 @@ The AI layer provides:
                                     │
                                     ▼
                     ┌───────────────────────────────┐
-                    │      AI Provider API          │
-                    │  (Anthropic, OpenAI, etc.)    │
+                    │  WordPress Connectors API     │
+                    │  (Settings → Connections)     │
+                    └──────────────┬────────────────┘
+                                   ▼
+                    ┌───────────────────────────────┐
+                    │   Configured AI Provider      │
                     └───────────────────────────────┘
 ```
 
@@ -789,28 +793,23 @@ taxonomies. I found 23 thread tutorials in your Twitter archive. I recommend:
 
 ### AI Provider Support
 
-Via the WordPress native AI capabilities (WordPress 7.0+), users can choose their provider:
+Provider selection, credentials, and routing are owned by WordPress core via the [Connectors API](https://make.wordpress.org/core/2026/03/18/introducing-the-connectors-api-in-wordpress-7-0/) (WordPress 7.0+). The plugin calls `wp_get_ai_client()` and uses whichever provider the site administrator has configured under **Settings → Connections** — it never asks for, stores, or manages API keys itself.
 
-| Provider | Models | Notes |
-|----------|--------|-------|
-| Anthropic | Claude 3.5 Sonnet, Claude 3 Opus | Recommended |
-| OpenAI | GPT-4o, GPT-4 Turbo | Widely available |
-| Google | Gemini Pro | Alternative option |
+### Token Estimation
 
-### Cost Estimation
-
-Before import, display estimated API usage:
+Before import, display estimated AI token usage so users can size the run against their connector's quota or pricing:
 
 ```
-Estimated AI API Usage
-──────────────────────
+Estimated AI Token Usage
+────────────────────────
 Alt text generation:     892 images × ~150 tokens = ~134k tokens
 Thread stitching:        147 threads × ~500 tokens = ~74k tokens
 SEO meta generation:     2,104 items × ~100 tokens = ~210k tokens
                                             ─────────────────────
                                             Total: ~418k tokens
-                                            Est. cost: ~$0.84 (Claude 3.5 Sonnet)
 ```
+
+Dollar costs are intentionally omitted — pricing depends on the connector and model the site administrator has chosen, both of which are managed by core.
 
 ---
 
@@ -830,14 +829,14 @@ SEO meta generation:     2,104 items × ~100 tokens = ~210k tokens
 4. **Transparent AI Usage**
    Clear indication of what data is sent to AI and why
 
-5. **User-Controlled Keys**
-   API keys stored in WordPress, never transmitted to plugin author
+5. **No Plugin-Held Credentials**
+   AI provider credentials are stored and managed by WordPress core's Connectors API. The plugin never sees, stores, or transmits API keys.
 
 ### Security Measures
 
 | Concern | Mitigation |
 |---------|------------|
-| API Key Storage | Encrypted in wp_options using WordPress salts |
+| AI Provider Credentials | Owned by WordPress core's Connectors API; the plugin never handles them |
 | File Uploads | Validated, scanned, stored in protected directory |
 | OAuth Tokens | Short-lived, stored encrypted, refreshed as needed |
 | XSS in Imported Content | All content sanitized via wp_kses on import |
@@ -1060,7 +1059,7 @@ v2.0.0 - Major Update
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
 | Platform export restrictions | Medium | High | Prioritize file uploads over APIs |
-| AI provider pricing changes | Medium | Medium | Support multiple providers |
+| AI provider pricing changes | Medium | Medium | Provider choice is owned by core's Connectors API; users can switch connectors without plugin changes |
 | WordPress.org rejection | Low | High | Follow guidelines strictly, pre-review |
 | Competition | Medium | Low | Focus on AI differentiation |
 
@@ -1069,8 +1068,8 @@ v2.0.0 - Major Update
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
 | Data loss during import | Low | Critical | Dry-run mode, rollback, no source deletion |
-| API key exposure | Low | High | Encrypted storage, security audit |
-| Unexpected AI costs | Medium | Medium | Clear cost estimation before import |
+| API key exposure | Low | High | Plugin never handles AI keys — credentials live in core's Connectors API |
+| Unexpected AI usage | Medium | Medium | Token estimate shown before import; cost depends on the connector chosen in core |
 | Content quality issues | Medium | Medium | Review queue, easy editing |
 
 ---
@@ -1095,7 +1094,7 @@ v2.0.0 - Major Update
 | Native WP Importer | Blogger, RSS | None | Free | Basic, manual |
 | Social Import (plugin) | Twitter, FB | None | $49 | Outdated, limited |
 | Jetvantage | Multiple | None | $99/yr | No AI, complex UI |
-| **AI Importer** | Universal | Full AI | Free | Requires API key |
+| **AI Importer** | Universal | Full AI | Free | Requires WordPress 7.0+ with an AI connector configured |
 
 ### Appendix C: User Research Summary
 
