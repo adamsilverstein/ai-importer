@@ -9,6 +9,7 @@ namespace AI_Importer\Processor;
 
 use AI_Importer\Adapters\AdapterRegistry;
 use AI_Importer\Normalizer\ContentNormalizer;
+use AI_Importer\Normalizer\BloggerNormalizer;
 use AI_Importer\Normalizer\InstagramNormalizer;
 use AI_Importer\Normalizer\MediumNormalizer;
 use AI_Importer\Normalizer\TwitterNormalizer;
@@ -288,6 +289,7 @@ class ImportProcessor {
 				'twitter'   => new TwitterNormalizer(),
 				'medium'    => new MediumNormalizer(),
 				'instagram' => new InstagramNormalizer(),
+				'blogger'   => new BloggerNormalizer(),
 			);
 
 			/**
