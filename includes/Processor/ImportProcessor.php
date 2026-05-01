@@ -9,6 +9,7 @@ namespace AI_Importer\Processor;
 
 use AI_Importer\Adapters\AdapterRegistry;
 use AI_Importer\Normalizer\ContentNormalizer;
+use AI_Importer\Normalizer\MediumNormalizer;
 use AI_Importer\Normalizer\TwitterNormalizer;
 
 /**
@@ -284,6 +285,7 @@ class ImportProcessor {
 		if ( null === $this->normalizers ) {
 			$this->normalizers = array(
 				'twitter' => new TwitterNormalizer(),
+				'medium'  => new MediumNormalizer(),
 			);
 
 			/**
