@@ -8,6 +8,7 @@
 namespace AI_Importer;
 
 use AI_Importer\Adapters\AdapterRegistry;
+use AI_Importer\Adapters\InstagramAdapter;
 use AI_Importer\Adapters\MediumAdapter;
 use AI_Importer\Adapters\TwitterAdapter;
 use AI_Importer\AI\AIService;
@@ -79,6 +80,7 @@ class Plugin {
 		// Register built-in adapters.
 		$this->adapter_registry->register( new TwitterAdapter() );
 		$this->adapter_registry->register( new MediumAdapter() );
+		$this->adapter_registry->register( new InstagramAdapter() );
 
 		/**
 		 * Fires when adapters should be registered.
