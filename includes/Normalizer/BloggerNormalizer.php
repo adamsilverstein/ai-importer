@@ -52,7 +52,7 @@ class BloggerNormalizer extends ContentNormalizer {
 			: new \DateTimeImmutable();
 
 		return new NormalizedItem(
-			source_id: (string) $raw_item['id'],
+			source_id: (string) ( $raw_item['id'] ?? '' ),
 			source_adapter: 'blogger',
 			content_type: $content_type,
 			content: $content,
