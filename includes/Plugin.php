@@ -10,10 +10,14 @@ namespace AI_Importer;
 use AI_Importer\Adapters\AdapterRegistry;
 use AI_Importer\Adapters\TwitterAdapter;
 use AI_Importer\AI\AIService;
+use AI_Importer\AI\AltTextGenerator;
+use AI_Importer\AI\HashtagMapper;
 use AI_Importer\AI\MetaDescriptionGenerator;
 use AI_Importer\AI\TitleGenerator;
+use AI_Importer\Processor\ContentCleaner;
 use AI_Importer\Processor\ImportProcessor;
 use AI_Importer\Processor\ItemEnhancer;
+use AI_Importer\Processor\MediaHandler;
 use AI_Importer\REST\ImportsController;
 use AI_Importer\REST\SourcesController;
 
@@ -85,7 +89,9 @@ class Plugin {
 		do_action( 'ai_importer_register_adapters', $this->adapter_registry );
 
 		// Initialize import processor (must run on all requests for Action Scheduler).
-		$processor = new ImportProcessor( null, null, $this->build_item_enhancer() );
+		$ai_service    = new AIService();
+		$media_handler = $this->build_media_handler( $ai_service );
+		$processor     = new ImportProcessor( null, $media_handler, $this->build_item_enhancer( $ai_service ) );
 		$processor->init();
 
 		// Initialize admin.
@@ -130,36 +136,78 @@ class Plugin {
 	}
 
 	/**
-	 * Construct the AI-backed item enhancer when a provider is available.
+	 * Construct the item enhancer.
 	 *
-	 * Returns null when no WP AI client is configured so the processor
-	 * runs without enhancement instead of emitting per-item errors.
+	 * AI-backed enhancements (title, meta description, hashtag mapping) are
+	 * only attached when a WP AI client is configured. The local
+	 * ContentCleaner runs regardless of AI availability.
 	 *
+	 * Returns null when no WP AI client is configured AND no local cleanup
+	 * would happen — currently the cleaner always runs, so this returns a
+	 * cleanup-only enhancer in that case.
+	 *
+	 * @param AIService $service AI service wrapper.
 	 * @return ItemEnhancer|null
 	 */
-	private function build_item_enhancer(): ?ItemEnhancer {
-		$service = new AIService();
+	private function build_item_enhancer( AIService $service ): ?ItemEnhancer {
+		$content_cleaner = new ContentCleaner();
 
 		if ( ! $service->is_available() ) {
-			$enhancer = null;
+			// Without AI we still want local cleanup. The Title and Meta
+			// generators are required dependencies of ItemEnhancer, but
+			// flags disable both so they are never called.
+			$enhancer = new ItemEnhancer(
+				new TitleGenerator( $service ),
+				new MetaDescriptionGenerator( $service ),
+				$content_cleaner,
+				null,
+				array(
+					'title'            => false,
+					'meta_description' => false,
+					'hashtag_mapping'  => false,
+				)
+			);
 		} else {
 			$enhancer = new ItemEnhancer(
 				new TitleGenerator( $service ),
-				new MetaDescriptionGenerator( $service )
+				new MetaDescriptionGenerator( $service ),
+				$content_cleaner,
+				new HashtagMapper( $service )
 			);
 		}
 
 		/**
 		 * Filters the item enhancer used by the import processor.
 		 *
-		 * Return null to disable AI enhancements entirely. Return a custom
-		 * ItemEnhancer instance to override title and meta description flags
-		 * or to inject alternative generators.
+		 * Return null to disable enhancements entirely. Return a custom
+		 * ItemEnhancer instance to override flags or inject alternatives.
 		 *
-		 * @param ItemEnhancer|null $enhancer Default enhancer (null when AI is unavailable).
+		 * @param ItemEnhancer|null $enhancer Default enhancer.
 		 */
 		$filtered = apply_filters( 'ai_importer_item_enhancer', $enhancer );
 
 		return $filtered instanceof ItemEnhancer ? $filtered : null;
+	}
+
+	/**
+	 * Construct the media handler with AI alt-text generation when available.
+	 *
+	 * @param AIService $service AI service wrapper.
+	 * @return MediaHandler
+	 */
+	private function build_media_handler( AIService $service ): MediaHandler {
+		$alt_generator = $service->is_available() ? new AltTextGenerator( $service ) : null;
+
+		/**
+		 * Filters the alt-text generator passed to the media handler.
+		 *
+		 * Return null to disable AI alt-text generation. Source-supplied
+		 * alt text from the adapter is preserved either way.
+		 *
+		 * @param AltTextGenerator|null $alt_generator Default generator (null when AI is unavailable).
+		 */
+		$alt_generator = apply_filters( 'ai_importer_alt_text_generator', $alt_generator );
+
+		return new MediaHandler( $alt_generator instanceof AltTextGenerator ? $alt_generator : null );
 	}
 }

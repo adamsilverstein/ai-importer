@@ -7,10 +7,12 @@
 
 namespace AI_Importer\Tests\Unit\Processor;
 
+use AI_Importer\AI\HashtagMapper;
 use AI_Importer\AI\MetaDescriptionGenerator;
 use AI_Importer\AI\TitleGenerator;
 use AI_Importer\Adapters\Manifest\ContentType;
 use AI_Importer\Normalizer\NormalizedItem;
+use AI_Importer\Processor\ContentCleaner;
 use AI_Importer\Processor\ItemEnhancer;
 use AI_Importer\Tests\Unit\TestCase;
 use DateTimeImmutable;
@@ -255,7 +257,7 @@ class ItemEnhancerTest extends TestCase {
 		$meta_gen = $this->createMock( MetaDescriptionGenerator::class );
 		$meta_gen->method( 'generate' )->willReturn( new WP_Error( 'skip', 'skip' ) );
 
-		$enhancer = new ItemEnhancer( $title_gen, $meta_gen, array( 'title' => false ) );
+		$enhancer = new ItemEnhancer( $title_gen, $meta_gen, null, null, array( 'title' => false ) );
 		$item     = $this->make_item( null, 'Body content.' );
 
 		$enhancer->enhance( $item );
@@ -278,6 +280,8 @@ class ItemEnhancerTest extends TestCase {
 		$enhancer = new ItemEnhancer(
 			$title_gen,
 			$meta_gen,
+			null,
+			null,
 			array( 'meta_description' => false )
 		);
 		$item = $this->make_item( 'Title', 'Body content.' );
@@ -285,5 +289,174 @@ class ItemEnhancerTest extends TestCase {
 		$enhancer->enhance( $item );
 
 		$this->assertArrayNotHasKey( ItemEnhancer::META_KEY_SEO_DESCRIPTION, $item->metadata );
+	}
+
+	/**
+	 * Test enhance applies content cleanup before AI calls.
+	 *
+	 * @return void
+	 */
+	public function test_enhance_applies_content_cleanup(): void {
+		$title_gen = $this->createMock( TitleGenerator::class );
+		$title_gen->method( 'generate' )->willReturn( new WP_Error( 'skip', 'skip' ) );
+
+		$captured_content = null;
+
+		$meta_gen = $this->createMock( MetaDescriptionGenerator::class );
+		$meta_gen->method( 'generate' )->willReturnCallback(
+			function ( $content ) use ( &$captured_content ) {
+				$captured_content = $content;
+				return 'A SEO description.';
+			}
+		);
+
+		$enhancer = new ItemEnhancer(
+			$title_gen,
+			$meta_gen,
+			new ContentCleaner()
+		);
+		$item     = $this->make_item(
+			'Title',
+			"Look at this https://t.co/abc123 cool thing\n\n#tag1 #tag2"
+		);
+
+		$enhancer->enhance( $item );
+
+		// Content was cleaned: short URL stripped, trailing hashtags stripped.
+		$this->assertSame( 'Look at this cool thing', $item->content );
+		// Meta generator received the cleaned content (no short URL, no trailing hashtags).
+		$this->assertSame( 'Look at this cool thing', $captured_content );
+	}
+
+	/**
+	 * Test cleanup flag disables ContentCleaner even when one is wired.
+	 *
+	 * @return void
+	 */
+	public function test_content_cleanup_flag_disables_cleaner(): void {
+		$title_gen = $this->createMock( TitleGenerator::class );
+		$title_gen->method( 'generate' )->willReturn( new WP_Error( 'skip', 'skip' ) );
+
+		$meta_gen = $this->createMock( MetaDescriptionGenerator::class );
+		$meta_gen->method( 'generate' )->willReturn( new WP_Error( 'skip', 'skip' ) );
+
+		$enhancer = new ItemEnhancer(
+			$title_gen,
+			$meta_gen,
+			new ContentCleaner(),
+			null,
+			array( 'content_cleanup' => false )
+		);
+
+		$raw  = "Look at this https://t.co/abc cool thing\n\n#tag1 #tag2";
+		$item = $this->make_item( 'Title', $raw );
+
+		$enhancer->enhance( $item );
+
+		$this->assertSame( $raw, $item->content );
+	}
+
+	/**
+	 * Test enhance maps hashtags via the HashtagMapper when present.
+	 *
+	 * @return void
+	 */
+	public function test_enhance_maps_hashtags(): void {
+		$title_gen = $this->createMock( TitleGenerator::class );
+		$title_gen->method( 'generate' )->willReturn( new WP_Error( 'skip', 'skip' ) );
+
+		$meta_gen = $this->createMock( MetaDescriptionGenerator::class );
+		$meta_gen->method( 'generate' )->willReturn( new WP_Error( 'skip', 'skip' ) );
+
+		$mapper = $this->createMock( HashtagMapper::class );
+		$mapper->expects( $this->once() )
+			->method( 'map' )
+			->willReturn( array( 'WordPress', 'AI' ) );
+
+		$enhancer = new ItemEnhancer( $title_gen, $meta_gen, null, $mapper );
+		$item     = $this->make_item(
+			'Title',
+			'Body.',
+			array( 'WordPress7', 'AI', 'WordPress7' )
+		);
+
+		$enhancer->enhance( $item );
+
+		$this->assertSame( array( 'WordPress', 'AI' ), $item->tags );
+	}
+
+	/**
+	 * Test enhance skips hashtag mapping when no tags exist.
+	 *
+	 * @return void
+	 */
+	public function test_enhance_skips_hashtag_map_when_no_tags(): void {
+		$title_gen = $this->createMock( TitleGenerator::class );
+		$title_gen->method( 'generate' )->willReturn( new WP_Error( 'skip', 'skip' ) );
+
+		$meta_gen = $this->createMock( MetaDescriptionGenerator::class );
+		$meta_gen->method( 'generate' )->willReturn( new WP_Error( 'skip', 'skip' ) );
+
+		$mapper = $this->createMock( HashtagMapper::class );
+		$mapper->expects( $this->never() )->method( 'map' );
+
+		$enhancer = new ItemEnhancer( $title_gen, $meta_gen, null, $mapper );
+		$item     = $this->make_item( 'Title', 'Body.', array() );
+
+		$enhancer->enhance( $item );
+
+		$this->assertSame( array(), $item->tags );
+	}
+
+	/**
+	 * Test hashtag mapper failure leaves the original tags intact.
+	 *
+	 * @return void
+	 */
+	public function test_hashtag_mapper_failure_preserves_tags(): void {
+		$title_gen = $this->createMock( TitleGenerator::class );
+		$title_gen->method( 'generate' )->willReturn( new WP_Error( 'skip', 'skip' ) );
+
+		$meta_gen = $this->createMock( MetaDescriptionGenerator::class );
+		$meta_gen->method( 'generate' )->willReturn( new WP_Error( 'skip', 'skip' ) );
+
+		$mapper = $this->createMock( HashtagMapper::class );
+		$mapper->method( 'map' )->willReturn( new WP_Error( 'ai_hashtag_failed', 'failed' ) );
+
+		$enhancer = new ItemEnhancer( $title_gen, $meta_gen, null, $mapper );
+		$item     = $this->make_item( 'Title', 'Body.', array( 'WordPress7', 'AI' ) );
+
+		$enhancer->enhance( $item );
+
+		$this->assertSame( array( 'WordPress7', 'AI' ), $item->tags );
+	}
+
+	/**
+	 * Test hashtag_mapping flag disables the mapper.
+	 *
+	 * @return void
+	 */
+	public function test_hashtag_mapping_flag_disables_mapper(): void {
+		$title_gen = $this->createMock( TitleGenerator::class );
+		$title_gen->method( 'generate' )->willReturn( new WP_Error( 'skip', 'skip' ) );
+
+		$meta_gen = $this->createMock( MetaDescriptionGenerator::class );
+		$meta_gen->method( 'generate' )->willReturn( new WP_Error( 'skip', 'skip' ) );
+
+		$mapper = $this->createMock( HashtagMapper::class );
+		$mapper->expects( $this->never() )->method( 'map' );
+
+		$enhancer = new ItemEnhancer(
+			$title_gen,
+			$meta_gen,
+			null,
+			$mapper,
+			array( 'hashtag_mapping' => false )
+		);
+		$item = $this->make_item( 'Title', 'Body.', array( 'WordPress7' ) );
+
+		$enhancer->enhance( $item );
+
+		$this->assertSame( array( 'WordPress7' ), $item->tags );
 	}
 }

@@ -7,6 +7,7 @@
 
 namespace AI_Importer\Tests\Unit\Processor;
 
+use AI_Importer\AI\AltTextGenerator;
 use AI_Importer\Adapters\Manifest\ContentType;
 use AI_Importer\Normalizer\MediaReference;
 use AI_Importer\Normalizer\NormalizedItem;
@@ -146,6 +147,128 @@ class MediaHandlerTest extends TestCase {
 
 		$this->expectException( \RuntimeException::class );
 		$this->handler->sideload( $media );
+	}
+
+	/**
+	 * Test sideload generates alt text for images that lack it.
+	 *
+	 * @return void
+	 */
+	public function test_sideload_generates_alt_text_for_image_without_alt(): void {
+		Functions\when( 'download_url' )->justReturn( '/tmp/downloaded.jpg' );
+		Functions\when( 'is_wp_error' )->alias(
+			function ( $thing ) {
+				return $thing instanceof \WP_Error;
+			}
+		);
+
+		$alt_set = null;
+		Functions\when( 'update_post_meta' )->alias(
+			function ( $post_id, $key, $value ) use ( &$alt_set ) {
+				if ( '_wp_attachment_image_alt' === $key ) {
+					$alt_set = $value;
+				}
+				return true;
+			}
+		);
+
+		$generator = $this->createMock( AltTextGenerator::class );
+		$generator->expects( $this->once() )
+			->method( 'generate' )
+			->with( 'https://example.com/sunset.jpg' )
+			->willReturn( 'A sunset over the ocean.' );
+
+		$handler = new MediaHandler( $generator );
+
+		$media = new MediaReference(
+			id: 'media-alt-1',
+			source_url: 'https://example.com/sunset.jpg',
+			type: MediaReference::TYPE_IMAGE,
+		);
+
+		$handler->sideload( $media );
+
+		$this->assertSame( 'A sunset over the ocean.', $media->alt_text );
+		$this->assertSame( 'A sunset over the ocean.', $alt_set );
+	}
+
+	/**
+	 * Test sideload preserves source-supplied alt text without calling AI.
+	 *
+	 * @return void
+	 */
+	public function test_sideload_does_not_overwrite_existing_alt_text(): void {
+		Functions\when( 'download_url' )->justReturn( '/tmp/downloaded.jpg' );
+
+		$generator = $this->createMock( AltTextGenerator::class );
+		$generator->expects( $this->never() )->method( 'generate' );
+
+		$handler = new MediaHandler( $generator );
+
+		$media = new MediaReference(
+			id: 'media-alt-2',
+			source_url: 'https://example.com/photo.jpg',
+			type: MediaReference::TYPE_IMAGE,
+			alt_text: 'Existing alt text from source.',
+		);
+
+		$handler->sideload( $media );
+
+		$this->assertSame( 'Existing alt text from source.', $media->alt_text );
+	}
+
+	/**
+	 * Test sideload skips alt-text generation for non-image media.
+	 *
+	 * @return void
+	 */
+	public function test_sideload_skips_alt_generation_for_non_images(): void {
+		Functions\when( 'download_url' )->justReturn( '/tmp/downloaded.mp4' );
+
+		$generator = $this->createMock( AltTextGenerator::class );
+		$generator->expects( $this->never() )->method( 'generate' );
+
+		$handler = new MediaHandler( $generator );
+
+		$media = new MediaReference(
+			id: 'media-alt-3',
+			source_url: 'https://example.com/video.mp4',
+			type: MediaReference::TYPE_VIDEO,
+		);
+
+		$handler->sideload( $media );
+
+		$this->assertNull( $media->alt_text );
+	}
+
+	/**
+	 * Test alt-text generation failure is non-fatal — sideload still succeeds.
+	 *
+	 * @return void
+	 */
+	public function test_sideload_tolerates_alt_text_generation_failure(): void {
+		Functions\when( 'download_url' )->justReturn( '/tmp/downloaded.jpg' );
+		Functions\when( 'is_wp_error' )->alias(
+			function ( $thing ) {
+				return $thing instanceof \WP_Error;
+			}
+		);
+
+		$generator = $this->createMock( AltTextGenerator::class );
+		$generator->method( 'generate' )->willReturn( new \WP_Error( 'fail', 'fail' ) );
+
+		$handler = new MediaHandler( $generator );
+
+		$media = new MediaReference(
+			id: 'media-alt-4',
+			source_url: 'https://example.com/image.jpg',
+			type: MediaReference::TYPE_IMAGE,
+		);
+
+		$attachment_id = $handler->sideload( $media );
+
+		$this->assertSame( 100, $attachment_id );
+		$this->assertNull( $media->alt_text );
 	}
 
 	/**
