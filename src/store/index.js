@@ -114,7 +114,7 @@ const resolvers = {
 		}
 	},
 	*getConnectedSources() {
-		yield resolvers.getSources();
+		yield* resolvers.getSources();
 	},
 };
 
