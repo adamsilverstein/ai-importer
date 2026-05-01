@@ -7,6 +7,7 @@
 
 namespace AI_Importer\Processor;
 
+use AI_Importer\AI\AltTextGenerator;
 use AI_Importer\Normalizer\MediaReference;
 use AI_Importer\Normalizer\NormalizedItem;
 use RuntimeException;
@@ -17,6 +18,23 @@ use RuntimeException;
  * remote URLs.
  */
 class MediaHandler {
+
+	/**
+	 * Optional alt-text generator. When provided, images that lack
+	 * source-supplied alt text get an AI-generated description.
+	 *
+	 * @var AltTextGenerator|null
+	 */
+	private ?AltTextGenerator $alt_text_generator;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param AltTextGenerator|null $alt_text_generator Optional AI alt-text generator.
+	 */
+	public function __construct( ?AltTextGenerator $alt_text_generator = null ) {
+		$this->alt_text_generator = $alt_text_generator;
+	}
 
 	/**
 	 * Process all media for a normalized item.
@@ -84,6 +102,32 @@ class MediaHandler {
 				! empty( $messages ) ? $messages[0] : 'Media sideload failed.'
 			);
 			// phpcs:enable WordPress.Security.EscapeOutput.ExceptionNotEscaped
+		}
+
+		// Generate alt text via AI when missing for an image. URL validation
+		// (scheme, format) is handled by AltTextGenerator itself.
+		$source_url = trim( (string) $media->source_url );
+		if (
+			$media->is_image() &&
+			( null === $media->alt_text || '' === trim( (string) $media->alt_text ) ) &&
+			null !== $this->alt_text_generator &&
+			'' !== $source_url
+		) {
+			$generated = $this->alt_text_generator->generate( $source_url );
+
+			if ( ! is_wp_error( $generated ) && '' !== trim( (string) $generated ) ) {
+				$media->alt_text = $generated;
+			} elseif ( is_wp_error( $generated ) && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				$messages = $generated->get_error_messages();
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug-only diagnostic log.
+				error_log(
+					sprintf(
+						'[ai-importer] alt text generation failed for %s: %s',
+						$source_url,
+						! empty( $messages ) ? $messages[0] : 'unknown error'
+					)
+				);
+			}
 		}
 
 		// Set alt text if available.
