@@ -228,7 +228,6 @@ class InstagramAdapter extends AbstractAdapter {
 	public function get_supported_content_types(): array {
 		return array(
 			ContentType::POST->value,
-			ContentType::MEDIA->value,
 			ContentType::STORY->value,
 			ContentType::VIDEO->value,
 		);
