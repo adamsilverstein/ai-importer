@@ -7,6 +7,7 @@
 import { createRoot } from '@wordpress/element';
 
 import App from './App';
+import './store';
 import './style.scss';
 
 // Wait for DOM to be ready.
