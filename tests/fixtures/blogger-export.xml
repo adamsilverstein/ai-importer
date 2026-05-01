@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:openSearch="http://a9.com/-/spec/opensearchrss/1.0/"
+      xmlns:thr="http://purl.org/syndication/thread/1.0">
+  <id>tag:blogger.com,1999:blog-1234567890</id>
+  <updated>2024-06-15T10:30:00.000-08:00</updated>
+  <title type="text">Test Blog</title>
+  <author>
+    <name>Test Author</name>
+    <uri>https://www.blogger.com/profile/1234</uri>
+  </author>
+
+  <entry>
+    <id>tag:blogger.com,1999:blog-1234567890.post-1001</id>
+    <published>2024-01-15T10:30:00.000-08:00</published>
+    <updated>2024-01-15T10:30:00.000-08:00</updated>
+    <category scheme="http://schemas.google.com/g/2005#kind"
+              term="http://schemas.google.com/blogger/2008/kind#post"/>
+    <category scheme="http://www.blogger.com/atom/ns#" term="WordPress"/>
+    <category scheme="http://www.blogger.com/atom/ns#" term="PHP"/>
+    <title type="text">Hello WordPress</title>
+    <content type="html">&lt;p&gt;A short hello-world post.&lt;/p&gt;&lt;p&gt;Welcome aboard!&lt;/p&gt;&lt;img src="https://example.com/img/welcome.jpg"/&gt;</content>
+    <link rel="alternate" type="text/html"
+          href="https://example.blogspot.com/2024/01/hello-wordpress.html"
+          title="Hello WordPress"/>
+    <author>
+      <name>Test Author</name>
+      <uri>https://www.blogger.com/profile/1234</uri>
+      <email>test@example.com</email>
+    </author>
+  </entry>
+
+  <entry>
+    <id>tag:blogger.com,1999:blog-1234567890.post-1002</id>
+    <published>2024-04-01T08:00:00.000-08:00</published>
+    <updated>2024-04-01T08:00:00.000-08:00</updated>
+    <category scheme="http://schemas.google.com/g/2005#kind"
+              term="http://schemas.google.com/blogger/2008/kind#post"/>
+    <category scheme="http://www.blogger.com/atom/ns#" term="AI"/>
+    <title type="text">A long-form post about AI</title>
+    <content type="html">&lt;p&gt;This is the kind of long-form content that makes for a meaty article. We explore many topics including machine learning models, training data, and inference performance characteristics that matter to engineers building real systems for production environments where every detail counts and every millisecond of latency matters to the eventual user experience that you ship.&lt;/p&gt;&lt;p&gt;The first section starts here. We talk about why the topic matters, what the field has tried before, and where the current state of the art sits. We also dig into the trade-offs that practitioners make every day when they pick one approach over another for a real workload.&lt;/p&gt;&lt;p&gt;The second section continues. We dig into transformer architectures, attention heads, key-value caching, and how they all interact when generating tokens at scale on production hardware that needs to balance throughput with latency. Engineers spend months tuning the constants in this section to squeeze the last bit of performance out of expensive accelerators.&lt;/p&gt;&lt;p&gt;The third section keeps building. Pre-training is just the beginning; post-training, supervised fine-tuning, and reinforcement learning from human feedback shape how the model behaves and what it ultimately says. The order of these stages matters more than people often realise, and skipping any of them can cause the model to drift in surprising ways once it is deployed in front of real users.&lt;/p&gt;&lt;p&gt;Section four follows. Memory hierarchy, page size, prefix caching, speculative decoding, and continuous batching are critical to wringing throughput out of expensive GPUs. The compiler stack, the kernel scheduler, and the runtime all need to cooperate, and any one of them being slightly off can cost you a factor of two in cost per token served.&lt;/p&gt;&lt;p&gt;Section five wraps up. Distillation lets us deliver smaller models that retain the capability profile of the bigger ones at a fraction of the cost, which is how mass-market AI becomes economically viable in the first place. The frontier always extends, and the techniques that look like magic today will be table stakes tomorrow as compute keeps getting cheaper and methods keep getting better.&lt;/p&gt;&lt;p&gt;Section six closes out. Routing, caching, batching, and intelligent retries make production systems usable in the real world. The boring infrastructure work is what differentiates a research demo from a product, and engineers who learn to do this well are worth their weight in gold to any team trying to ship something real.&lt;/p&gt;&lt;p&gt;Section seven offers some closing thoughts on where the field is going, what the next year of progress probably looks like, and which open problems are worth your attention. We discuss the gap between what current systems can do and what users actually want, and we talk about the tooling and infrastructure that researchers wish they had today but don&#39;t. The hardest part of progress in this field is often less about the underlying science and more about the practical engineering scaffolding that turns a clever idea into something a non-expert can use without thinking about it.&lt;/p&gt;&lt;p&gt;Finally, an epilogue: the people who do this work are remarkable, and many of them got here through unconventional paths. If you are reading this and wondering whether you could contribute to the next wave of progress, the answer is almost certainly yes; the only question is what your particular contribution looks like, and you will not know until you start trying things that interest you.&lt;/p&gt;</content>
+    <link rel="alternate" type="text/html"
+          href="https://example.blogspot.com/2024/04/long-form-ai.html"/>
+    <author>
+      <name>Test Author</name>
+      <uri>https://www.blogger.com/profile/1234</uri>
+    </author>
+  </entry>
+
+  <entry>
+    <id>tag:blogger.com,1999:blog-1234567890.post-1003</id>
+    <published>2024-05-01T08:00:00.000-08:00</published>
+    <updated>2024-05-01T08:00:00.000-08:00</updated>
+    <category scheme="http://schemas.google.com/g/2005#kind"
+              term="http://schemas.google.com/blogger/2008/kind#page"/>
+    <title type="text">About me</title>
+    <content type="html">&lt;p&gt;Just a short about-me page.&lt;/p&gt;</content>
+    <link rel="alternate" type="text/html"
+          href="https://example.blogspot.com/p/about.html"/>
+    <author>
+      <name>Test Author</name>
+    </author>
+  </entry>
+
+  <entry>
+    <id>tag:blogger.com,1999:blog-1234567890.post-COMMENT-555</id>
+    <published>2024-01-16T11:00:00.000-08:00</published>
+    <updated>2024-01-16T11:00:00.000-08:00</updated>
+    <category scheme="http://schemas.google.com/g/2005#kind"
+              term="http://schemas.google.com/blogger/2008/kind#comment"/>
+    <thr:in-reply-to ref="tag:blogger.com,1999:blog-1234567890.post-1001"
+                     href="https://example.blogspot.com/2024/01/hello-wordpress.html"
+                     type="text/html"/>
+    <title type="text">A comment from a reader</title>
+    <content type="html">Nice post!</content>
+    <author>
+      <name>Reader Person</name>
+    </author>
+  </entry>
+
+  <entry>
+    <id>tag:blogger.com,1999:blog-1234567890.post-SETTINGS-9</id>
+    <category scheme="http://schemas.google.com/g/2005#kind"
+              term="http://schemas.google.com/blogger/2008/kind#settings"/>
+    <title>BLOG_SETTINGS</title>
+    <content type="text">SETTING:VALUE</content>
+  </entry>
+</feed>
