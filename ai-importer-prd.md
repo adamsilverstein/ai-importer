@@ -799,7 +799,7 @@ Provider selection, credentials, and routing are owned by WordPress core via the
 
 Before import, display estimated AI token usage so users can size the run against their connector's quota or pricing:
 
-```
+```text
 Estimated AI Token Usage
 ────────────────────────
 Alt text generation:     892 images × ~150 tokens = ~134k tokens
