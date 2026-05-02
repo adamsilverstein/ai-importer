@@ -12,6 +12,7 @@ use AI_Importer\Normalizer\ContentNormalizer;
 use AI_Importer\Normalizer\BloggerNormalizer;
 use AI_Importer\Normalizer\InstagramNormalizer;
 use AI_Importer\Normalizer\MediumNormalizer;
+use AI_Importer\Normalizer\TumblrNormalizer;
 use AI_Importer\Normalizer\TwitterNormalizer;
 
 /**
@@ -290,6 +291,7 @@ class ImportProcessor {
 				'medium'    => new MediumNormalizer(),
 				'instagram' => new InstagramNormalizer(),
 				'blogger'   => new BloggerNormalizer(),
+				'tumblr'    => new TumblrNormalizer(),
 			);
 
 			/**

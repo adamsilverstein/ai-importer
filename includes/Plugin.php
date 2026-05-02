@@ -11,6 +11,7 @@ use AI_Importer\Adapters\AdapterRegistry;
 use AI_Importer\Adapters\BloggerAdapter;
 use AI_Importer\Adapters\InstagramAdapter;
 use AI_Importer\Adapters\MediumAdapter;
+use AI_Importer\Adapters\TumblrAdapter;
 use AI_Importer\Adapters\TwitterAdapter;
 use AI_Importer\AI\AIService;
 use AI_Importer\AI\AltTextGenerator;
@@ -83,6 +84,7 @@ class Plugin {
 		$this->adapter_registry->register( new MediumAdapter() );
 		$this->adapter_registry->register( new InstagramAdapter() );
 		$this->adapter_registry->register( new BloggerAdapter() );
+		$this->adapter_registry->register( new TumblrAdapter() );
 
 		/**
 		 * Fires when adapters should be registered.
