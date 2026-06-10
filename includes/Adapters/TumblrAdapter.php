@@ -234,6 +234,12 @@ class TumblrAdapter extends AbstractAdapter {
 
 		$post = $posts[ $item_id ];
 
+		if ( ! array_key_exists( 'media_paths', $post ) ) {
+			$this->posts[ $item_id ]['media_paths'] = $this->resolve_local_media( $post );
+
+			$post = $this->posts[ $item_id ];
+		}
+
 		return array(
 			'id'           => $item_id,
 			'type'         => $this->classify_post( $post )->value,
@@ -241,6 +247,7 @@ class TumblrAdapter extends AbstractAdapter {
 			'title'        => $post['title'],
 			'created_at'   => $post['published_at']->format( 'c' ),
 			'media_urls'   => $post['media_urls'],
+			'media_paths'  => $post['media_paths'],
 			'metadata'     => array(
 				'post_type'    => $post['post_type'],
 				'tags'         => $post['tags'],
@@ -405,7 +412,7 @@ class TumblrAdapter extends AbstractAdapter {
 				continue;
 			}
 
-			$parsed = $this->parse_post( $html, $matches[1] );
+			$parsed = $this->parse_post( $html, $matches[1], $name );
 
 			if ( null === $parsed ) {
 				continue;
@@ -430,11 +437,12 @@ class TumblrAdapter extends AbstractAdapter {
 	/**
 	 * Parse one Tumblr post HTML file.
 	 *
-	 * @param string $html     Raw HTML.
-	 * @param string $filename The filename within posts/ (without .html).
+	 * @param string $html       Raw HTML.
+	 * @param string $filename   The filename within posts/ (without .html).
+	 * @param string $entry_name Full entry name within the ZIP archive.
 	 * @return array<string, mixed>|null Parsed post or null on failure.
 	 */
-	private function parse_post( string $html, string $filename ): ?array {
+	private function parse_post( string $html, string $filename, string $entry_name ): ?array {
 		$dom  = new DOMDocument();
 		$prev = libxml_use_internal_errors( true );
 		$dom->loadHTML( '<?xml encoding="UTF-8">' . $html );
@@ -451,9 +459,10 @@ class TumblrAdapter extends AbstractAdapter {
 		$author_url    = $this->xpath_attr( $xpath, "//*[contains(concat(' ', normalize-space(@class), ' '), ' post-author ')]", 'href' );
 
 		$reblog_info  = $this->extract_reblog_info( $xpath );
-		$content_html = $this->extract_content_html( $dom, $xpath );
+		$content_node = $this->find_content_node( $dom, $xpath );
+		$content_html = null !== $content_node ? trim( $this->inner_html( $dom, $content_node ) ) : '';
 		$title        = $this->extract_title( $xpath, $content_html );
-		$media_urls   = $this->extract_media_urls( $xpath, $content_html );
+		$media_urls   = $this->extract_media_urls( $xpath, $content_node, $content_html );
 
 		// Skip empty posts (no content and no media) — these are noise.
 		$has_content = '' !== trim( wp_strip_all_tags( $content_html ) );
@@ -463,6 +472,7 @@ class TumblrAdapter extends AbstractAdapter {
 
 		return array(
 			'id'            => $filename,
+			'archive_entry' => $entry_name,
 			'post_type'     => $post_type,
 			'title'         => trim( $title ),
 			'content'       => $content_html,
@@ -644,16 +654,17 @@ class TumblrAdapter extends AbstractAdapter {
 	}
 
 	/**
-	 * Extract the post content as HTML.
+	 * Find the element wrapping the post content.
 	 *
 	 * Looks for an explicit `.post-content` (or `.content` inside a post
 	 * wrapper) first, then falls back to `<article>`, then to `<body>`.
 	 *
 	 * @param DOMDocument $dom   The DOM document.
 	 * @param DOMXPath    $xpath The XPath helper.
-	 * @return string Inner HTML of the content section, or empty string.
+	 * @return DOMElement|null The content wrapper, or null when no
+	 *                         non-empty candidate exists.
 	 */
-	private function extract_content_html( DOMDocument $dom, DOMXPath $xpath ): string {
+	private function find_content_node( DOMDocument $dom, DOMXPath $xpath ): ?DOMElement {
 		$queries = array(
 			"//*[contains(concat(' ', normalize-space(@class), ' '), ' post-content ')]",
 			"//article//*[contains(concat(' ', normalize-space(@class), ' '), ' content ')]",
@@ -674,11 +685,11 @@ class TumblrAdapter extends AbstractAdapter {
 
 			$html = $this->inner_html( $dom, $node );
 			if ( '' !== trim( $html ) ) {
-				return trim( $html );
+				return $node;
 			}
 		}
 
-		return '';
+		return null;
 	}
 
 	/**
@@ -745,33 +756,32 @@ class TumblrAdapter extends AbstractAdapter {
 	/**
 	 * Pull media URLs from `<img src>`, `<video src>`, and `<audio src>` inside the post.
 	 *
-	 * Falls back to scanning the content HTML when DOM queries miss
-	 * (e.g. when media is referenced as a relative path).
+	 * Queries are scoped to the post content wrapper when one was found,
+	 * so theme chrome outside the post (avatars, icons) is ignored. Falls
+	 * back to scanning the content HTML when DOM queries miss.
 	 *
-	 * @param DOMXPath $xpath        The XPath helper.
-	 * @param string   $content_html The content HTML for fallback regex scan.
+	 * @param DOMXPath        $xpath        The XPath helper.
+	 * @param DOMElement|null $context      The post content wrapper to scope queries to.
+	 * @param string          $content_html The content HTML for fallback regex scan.
 	 * @return array<string>
 	 */
-	private function extract_media_urls( DOMXPath $xpath, string $content_html ): array {
+	private function extract_media_urls( DOMXPath $xpath, ?DOMElement $context, string $content_html ): array {
 		$urls = array();
 
-		foreach ( array( '//img/@src', '//video/@src', '//audio/@src', '//source/@src' ) as $query ) {
-			$nodes = $xpath->query( $query );
+		// `.//video/@poster` covers exports that inline poster images.
+		$queries = array(
+			'.//img/@src',
+			'.//video/@src',
+			'.//audio/@src',
+			'.//source/@src',
+			'.//video/@poster',
+		);
+
+		foreach ( $queries as $query ) {
+			$nodes = $xpath->query( $query, $context );
 			if ( false === $nodes ) {
 				continue;
 			}
-			foreach ( $nodes as $attr ) {
-				// phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOMAttr API.
-				$src = trim( (string) $attr->nodeValue );
-				if ( '' !== $src ) {
-					$urls[] = $src;
-				}
-			}
-		}
-
-		// Some Tumblr exports inline poster images on `<video poster="...">`.
-		$nodes = $xpath->query( '//video/@poster' );
-		if ( false !== $nodes ) {
 			foreach ( $nodes as $attr ) {
 				// phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOMAttr API.
 				$src = trim( (string) $attr->nodeValue );
@@ -788,6 +798,169 @@ class TumblrAdapter extends AbstractAdapter {
 		}
 
 		return array_values( array_unique( $urls ) );
+	}
+
+	/**
+	 * Resolve archive-relative media references to extracted local files.
+	 *
+	 * Tumblr backups reference attachments with archive-relative paths
+	 * (e.g. `media/sunset.jpg`) that cannot be downloaded over HTTP. For
+	 * each such reference this extracts the file from the ZIP to a temp
+	 * file so the import processor can sideload it via `local_path`.
+	 * Absolute http(s) URLs are left alone and resolve to null entries.
+	 *
+	 * @param array<string, mixed> $post Parsed post.
+	 * @return array<int, string|null> Local file paths aligned by index
+	 *                                 with the post's media_urls.
+	 */
+	private function resolve_local_media( array $post ): array {
+		$media_urls = is_array( $post['media_urls'] ?? null ) ? $post['media_urls'] : array();
+		$paths      = array_fill( 0, count( $media_urls ), null );
+
+		$has_relative = false;
+		foreach ( $media_urls as $url ) {
+			if ( $this->is_relative_media_path( (string) $url ) ) {
+				$has_relative = true;
+				break;
+			}
+		}
+
+		if ( ! $has_relative ) {
+			return $paths;
+		}
+
+		$credentials = $this->get_stored_credentials();
+		$file_path   = (string) ( $credentials['file_path'] ?? '' );
+
+		if ( '' === $file_path || ! file_exists( $file_path ) ) {
+			return $paths;
+		}
+
+		$zip = new \ZipArchive();
+
+		if ( true !== $zip->open( $file_path ) ) {
+			$this->log_error( 'Failed to open Tumblr backup ZIP for media extraction.' );
+			return $paths;
+		}
+
+		$entry_dir = dirname( (string) ( $post['archive_entry'] ?? '' ) );
+
+		foreach ( $media_urls as $index => $url ) {
+			$url = (string) $url;
+
+			if ( ! $this->is_relative_media_path( $url ) ) {
+				continue;
+			}
+
+			$paths[ $index ] = $this->extract_media_entry( $zip, $url, $entry_dir );
+		}
+
+		$zip->close();
+
+		return $paths;
+	}
+
+	/**
+	 * Check whether a media reference is an archive-relative path.
+	 *
+	 * Anything with a scheme (http:, https:, data:), a protocol-relative
+	 * `//` prefix, or a leading slash is treated as external.
+	 *
+	 * @param string $url Media reference from the post HTML.
+	 * @return bool True when the reference points into the archive.
+	 */
+	private function is_relative_media_path( string $url ): bool {
+		if ( '' === $url ) {
+			return false;
+		}
+
+		if ( str_starts_with( $url, '//' ) || str_starts_with( $url, '/' ) ) {
+			return false;
+		}
+
+		return 1 !== preg_match( '#^[a-z][a-z0-9+.\-]*:#i', $url );
+	}
+
+	/**
+	 * Extract a single media entry from the ZIP to a temp file.
+	 *
+	 * Tries the reference relative to the post HTML file (handles
+	 * `../media/...`), relative to the archive root (handles `media/...`
+	 * even when the export lives in a subdirectory), then verbatim.
+	 *
+	 * @param \ZipArchive $zip           Open archive.
+	 * @param string      $relative_path Archive-relative media reference.
+	 * @param string      $entry_dir     Directory of the post HTML entry within the ZIP.
+	 * @return string|null Absolute path to the extracted temp file, or null.
+	 */
+	private function extract_media_entry( \ZipArchive $zip, string $relative_path, string $entry_dir ): ?string {
+		$parent_dir = '.' === $entry_dir || '' === $entry_dir ? '' : dirname( $entry_dir );
+		$parent_dir = '.' === $parent_dir ? '' : $parent_dir;
+
+		$candidates = array_unique(
+			array_filter(
+				array(
+					$this->normalize_zip_path( $entry_dir . '/' . $relative_path ),
+					$this->normalize_zip_path( ( '' !== $parent_dir ? $parent_dir . '/' : '' ) . $relative_path ),
+					$this->normalize_zip_path( $relative_path ),
+				)
+			)
+		);
+
+		foreach ( $candidates as $candidate ) {
+			$contents = $zip->getFromName( $candidate );
+
+			if ( false === $contents ) {
+				continue;
+			}
+
+			if ( ! function_exists( 'wp_tempnam' ) ) {
+				require_once ABSPATH . 'wp-admin/includes/file.php';
+			}
+
+			$tmp_path = wp_tempnam( wp_basename( $candidate ) );
+
+			if ( ! $tmp_path ) {
+				return null;
+			}
+
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Writing extracted archive media to a temp file for sideloading.
+			if ( false === file_put_contents( $tmp_path, $contents ) ) {
+				wp_delete_file( $tmp_path );
+				return null;
+			}
+
+			return $tmp_path;
+		}
+
+		$this->log_error( 'Media file not found in Tumblr archive.', array( 'path' => $relative_path ) );
+
+		return null;
+	}
+
+	/**
+	 * Normalize a ZIP entry path, resolving `.` and `..` segments.
+	 *
+	 * @param string $path Candidate entry path.
+	 * @return string Normalized path with no leading slash.
+	 */
+	private function normalize_zip_path( string $path ): string {
+		$parts = array();
+
+		foreach ( explode( '/', str_replace( '\\', '/', $path ) ) as $segment ) {
+			if ( '' === $segment || '.' === $segment ) {
+				continue;
+			}
+
+			if ( '..' === $segment ) {
+				array_pop( $parts );
+				continue;
+			}
+
+			$parts[] = $segment;
+		}
+
+		return implode( '/', $parts );
 	}
 
 	/**

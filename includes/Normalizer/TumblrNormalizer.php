@@ -14,8 +14,12 @@ use AI_Importer\Adapters\Manifest\ContentType;
  * into the universal NormalizedItem format.
  *
  * Expected raw item shape from TumblrAdapter:
- *   id, type, content, title, created_at, media_urls, metadata,
- *   original_url, tags, author, raw
+ *   id, type, content, title, created_at, media_urls, media_paths,
+ *   metadata, original_url, tags, author, raw
+ *
+ * `media_paths` is aligned by index with `media_urls` and carries the
+ * absolute path of media extracted from the backup ZIP (null for media
+ * referenced by absolute http(s) URL).
  *
  * The `metadata` array carries Tumblr-specific fields (`post_type`,
  * `is_reblog`, `reblog_from`, `source_title`) that downstream consumers
@@ -41,8 +45,27 @@ class TumblrNormalizer extends ContentNormalizer {
 	public function normalize( array $raw_item ): NormalizedItem {
 		$content = $this->clean_content( (string) ( $raw_item['content'] ?? '' ) );
 
-		$media_urls = $raw_item['media_urls'] ?? array();
-		$media      = $this->extract_media_from_urls( is_array( $media_urls ) ? $media_urls : array() );
+		$media_urls  = is_array( $raw_item['media_urls'] ?? null ) ? $raw_item['media_urls'] : array();
+		$media_paths = is_array( $raw_item['media_paths'] ?? null ) ? $raw_item['media_paths'] : array();
+		$media       = array();
+
+		foreach ( $media_urls as $index => $url ) {
+			$url = (string) $url;
+
+			if ( '' === $url ) {
+				continue;
+			}
+
+			$reference = MediaReference::from_url( $url );
+
+			// Media extracted from the backup ZIP sideloads from disk
+			// instead of being downloaded from the (relative) source URL.
+			if ( ! empty( $media_paths[ $index ] ) ) {
+				$reference->local_path = (string) $media_paths[ $index ];
+			}
+
+			$media[] = $reference;
+		}
 
 		$metadata = is_array( $raw_item['metadata'] ?? null ) ? $raw_item['metadata'] : array();
 		$tags     = is_array( $raw_item['tags'] ?? null ) ? $raw_item['tags'] : array();
