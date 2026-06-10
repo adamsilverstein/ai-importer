@@ -72,15 +72,20 @@ class ImportsController extends WP_REST_Controller {
 					'callback'            => array( $this, 'create_item' ),
 					'permission_callback' => array( $this, 'permissions_check' ),
 					'args'                => array(
-						'source_adapter' => array(
+						'source_adapter'  => array(
 							'required'          => true,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						),
-						'item_ids'       => array(
+						'item_ids'        => array(
 							'required' => true,
 							'type'     => 'array',
 							'items'    => array( 'type' => 'string' ),
+						),
+						'update_existing' => array(
+							'type'              => 'boolean',
+							'default'           => false,
+							'sanitize_callback' => 'rest_sanitize_boolean',
 						),
 					),
 				),
@@ -236,18 +241,20 @@ class ImportsController extends WP_REST_Controller {
 		$now      = gmdate( 'c' );
 
 		$batch = array(
-			'id'             => $batch_id,
-			'source_adapter' => $source_adapter,
-			'state'          => 'processing',
-			'item_ids'       => $item_ids,
-			'total'          => count( $item_ids ),
-			'processed'      => 0,
-			'failed'         => 0,
-			'errors'         => array(),
-			'created_at'     => $now,
-			'started_at'     => $now,
-			'completed_at'   => null,
-			'imported_ids'   => array(),
+			'id'              => $batch_id,
+			'source_adapter'  => $source_adapter,
+			'state'           => 'processing',
+			'item_ids'        => $item_ids,
+			'total'           => count( $item_ids ),
+			'processed'       => 0,
+			'failed'          => 0,
+			'skipped'         => 0,
+			'update_existing' => (bool) $request->get_param( 'update_existing' ),
+			'errors'          => array(),
+			'created_at'      => $now,
+			'started_at'      => $now,
+			'completed_at'    => null,
+			'imported_ids'    => array(),
 		);
 
 		$this->save_batch( $batch );
@@ -415,7 +422,8 @@ class ImportsController extends WP_REST_Controller {
 	private function serialize_batch( array $batch ): array {
 		$total      = max( 1, (int) $batch['total'] );
 		$processed  = (int) $batch['processed'];
-		$percentage = min( 100, (int) round( ( $processed / $total ) * 100 ) );
+		$skipped    = (int) ( $batch['skipped'] ?? 0 );
+		$percentage = min( 100, (int) round( ( ( $processed + $skipped ) / $total ) * 100 ) );
 
 		$state_labels = array(
 			'processing'  => __( 'Processing', 'ai-importer' ),
@@ -426,18 +434,20 @@ class ImportsController extends WP_REST_Controller {
 		);
 
 		return array(
-			'id'             => $batch['id'],
-			'source_adapter' => $batch['source_adapter'],
-			'state'          => $batch['state'],
-			'state_label'    => $state_labels[ $batch['state'] ] ?? $batch['state'],
-			'total'          => $total,
-			'processed'      => $processed,
-			'failed'         => (int) $batch['failed'],
-			'percentage'     => $percentage,
-			'created_at'     => $batch['created_at'],
-			'started_at'     => $batch['started_at'] ?? null,
-			'completed_at'   => $batch['completed_at'] ?? null,
-			'errors'         => array_slice( $batch['errors'] ?? array(), -50 ),
+			'id'              => $batch['id'],
+			'source_adapter'  => $batch['source_adapter'],
+			'state'           => $batch['state'],
+			'state_label'     => $state_labels[ $batch['state'] ] ?? $batch['state'],
+			'total'           => $total,
+			'processed'       => $processed,
+			'failed'          => (int) $batch['failed'],
+			'skipped'         => $skipped,
+			'update_existing' => ! empty( $batch['update_existing'] ),
+			'percentage'      => $percentage,
+			'created_at'      => $batch['created_at'],
+			'started_at'      => $batch['started_at'] ?? null,
+			'completed_at'    => $batch['completed_at'] ?? null,
+			'errors'          => array_slice( $batch['errors'] ?? array(), -50 ),
 		);
 	}
 
