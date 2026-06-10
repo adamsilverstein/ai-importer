@@ -197,6 +197,8 @@ class SourcesController extends WP_REST_Controller {
 						'sample_size' => array(
 							'required'          => false,
 							'type'              => 'integer',
+							'minimum'           => 1,
+							'maximum'           => 50,
 							'sanitize_callback' => 'absint',
 						),
 					),
