@@ -219,6 +219,132 @@ class ContentCreatorTest extends TestCase {
 	}
 
 	/**
+	 * Test find_existing returns the matching post ID.
+	 *
+	 * @return void
+	 */
+	public function test_find_existing_returns_post_id(): void {
+		$captured_args = null;
+
+		Functions\when( 'get_posts' )->alias(
+			function ( $args ) use ( &$captured_args ) {
+				$captured_args = $args;
+				return array( 99 );
+			}
+		);
+
+		$result = $this->creator->find_existing( 'twitter', 'tweet-123' );
+
+		$this->assertSame( 99, $result );
+		$this->assertSame( 'ids', $captured_args['fields'] );
+		$this->assertSame( 1, $captured_args['posts_per_page'] );
+		$this->assertSame( 'any', $captured_args['post_status'] );
+		$this->assertSame(
+			array(
+				array(
+					'key'   => ContentCreator::META_SOURCE,
+					'value' => 'twitter',
+				),
+				array(
+					'key'   => ContentCreator::META_SOURCE_ID,
+					'value' => 'tweet-123',
+				),
+			),
+			$captured_args['meta_query']
+		);
+	}
+
+	/**
+	 * Test find_existing returns null when no match exists.
+	 *
+	 * @return void
+	 */
+	public function test_find_existing_returns_null_when_no_match(): void {
+		Functions\when( 'get_posts' )->justReturn( array() );
+
+		$this->assertNull( $this->creator->find_existing( 'twitter', 'tweet-123' ) );
+	}
+
+	/**
+	 * Test find_existing short-circuits on empty identifiers.
+	 *
+	 * @return void
+	 */
+	public function test_find_existing_returns_null_for_empty_identifiers(): void {
+		Functions\expect( 'get_posts' )->never();
+
+		$this->assertNull( $this->creator->find_existing( '', 'tweet-123' ) );
+		$this->assertNull( $this->creator->find_existing( 'twitter', '' ) );
+	}
+
+	/**
+	 * Test update refreshes the post and tracking meta.
+	 *
+	 * @return void
+	 */
+	public function test_update_refreshes_post_and_meta(): void {
+		$captured_args = null;
+
+		Functions\when( 'wp_update_post' )->alias(
+			function ( $args ) use ( &$captured_args ) {
+				$captured_args = $args;
+				return $args['ID'];
+			}
+		);
+		Functions\when( 'is_wp_error' )->justReturn( false );
+
+		$item   = $this->make_item( array( 'content' => '<p>Updated content.</p>' ) );
+		$result = $this->creator->update( 55, $item, 'batch-def' );
+
+		$this->assertSame( 55, $result );
+		$this->assertSame( 55, $captured_args['ID'] );
+		$this->assertSame( 'Hello world!', $captured_args['post_title'] );
+		$this->assertSame( '<p>Updated content.</p>', $captured_args['post_content'] );
+		$this->assertSame( '2024-01-15 10:00:00', $captured_args['post_date'] );
+
+		$meta = $this->post_meta[55] ?? array();
+		$this->assertSame( 'batch-def', $meta[ ContentCreator::META_BATCH_ID ] );
+		$this->assertArrayHasKey( ContentCreator::META_IMPORTED_AT, $meta );
+	}
+
+	/**
+	 * Test update throws on wp_update_post failure.
+	 *
+	 * @return void
+	 */
+	public function test_update_throws_on_failure(): void {
+		Functions\when( 'wp_update_post' )->justReturn(
+			new \WP_Error( 'update_error', 'Update failed' )
+		);
+		Functions\when( 'is_wp_error' )->alias(
+			function ( $thing ) {
+				return $thing instanceof \WP_Error;
+			}
+		);
+
+		$this->expectException( \RuntimeException::class );
+		$this->creator->update( 55, $this->make_item(), 'batch-def' );
+	}
+
+	/**
+	 * Test post_updated action fires.
+	 *
+	 * @return void
+	 */
+	public function test_post_updated_action_fires(): void {
+		Functions\when( 'wp_update_post' )->justReturn( 55 );
+		Functions\when( 'is_wp_error' )->justReturn( false );
+
+		Actions\expectDone( 'ai_importer_post_updated' )
+			->once()
+			->with( 55, \Mockery::type( NormalizedItem::class ), 'batch-def' );
+
+		$this->creator->update( 55, $this->make_item(), 'batch-def' );
+
+		$this->assertBrainMonkeyExpectations();
+	}
+
+	/**
 	 * Create a test NormalizedItem.
 	 *
 	 * @param array<string, mixed> $overrides Field overrides.
