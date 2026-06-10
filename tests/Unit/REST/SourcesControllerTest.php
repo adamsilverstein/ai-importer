@@ -346,6 +346,87 @@ class SourcesControllerTest extends TestCase {
 	}
 
 	/**
+	 * Test malformed analyzer errors carrying response data still receive a 502 status.
+	 *
+	 * @return void
+	 */
+	public function test_get_mapping_suggestions_sets_status_on_malformed_analyzer_error_with_data(): void {
+		$manifest = $this->build_manifest_with_items( 'twitter', 1 );
+		$adapter  = $this->register_mock_adapter( 'twitter', true );
+		$adapter->shouldReceive( 'fetch_manifest' )->once()->andReturn( $manifest );
+
+		$raw_response = array( 'unexpected' => 'shape' );
+
+		$content_analyzer = Mockery::mock( ContentAnalyzer::class );
+		$content_analyzer->shouldReceive( 'analyze' )->once()->andReturn(
+			new WP_Error(
+				'ai_analyze_malformed',
+				'AI analysis response is missing required field: content_type.',
+				array( 'response' => $raw_response )
+			)
+		);
+
+		$schema_analyzer = Mockery::mock( SiteSchemaAnalyzer::class );
+		$suggester       = Mockery::mock( MappingSuggester::class );
+
+		$controller    = new SourcesController( $content_analyzer, $schema_analyzer, $suggester );
+		$request       = new WP_REST_Request( 'GET', '/ai-importer/v1/sources/twitter/mapping-suggestions' );
+		$request['id'] = 'twitter';
+
+		$result = $controller->get_mapping_suggestions( $request );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertContains( 'ai_analyze_malformed', $result->get_error_codes() );
+
+		$data = $result->get_error_data();
+		$this->assertIsArray( $data );
+		$this->assertSame( 502, $data['status'] );
+		$this->assertSame( $raw_response, $data['response'] );
+	}
+
+	/**
+	 * Test malformed suggester errors carrying response data still receive a 502 status.
+	 *
+	 * @return void
+	 */
+	public function test_get_mapping_suggestions_sets_status_on_malformed_suggester_error_with_data(): void {
+		$manifest = $this->build_manifest_with_items( 'twitter', 1 );
+		$adapter  = $this->register_mock_adapter( 'twitter', true );
+		$adapter->shouldReceive( 'fetch_manifest' )->once()->andReturn( $manifest );
+
+		$content_analyzer = Mockery::mock( ContentAnalyzer::class );
+		$content_analyzer->shouldReceive( 'analyze' )->once()->andReturn( $this->sample_analysis() );
+
+		$schema_analyzer = Mockery::mock( SiteSchemaAnalyzer::class );
+		$schema_analyzer->shouldReceive( 'get_schema' )->andReturn( $this->sample_site_schema() );
+
+		$raw_response = array( 'mappings' => 'not-an-array' );
+
+		$suggester = Mockery::mock( MappingSuggester::class );
+		$suggester->shouldReceive( 'suggest' )->once()->andReturn(
+			new WP_Error(
+				'ai_mapping_malformed',
+				'AI mapping response field "mappings" must be of type array.',
+				array( 'response' => $raw_response )
+			)
+		);
+
+		$controller    = new SourcesController( $content_analyzer, $schema_analyzer, $suggester );
+		$request       = new WP_REST_Request( 'GET', '/ai-importer/v1/sources/twitter/mapping-suggestions' );
+		$request['id'] = 'twitter';
+
+		$result = $controller->get_mapping_suggestions( $request );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertContains( 'ai_mapping_malformed', $result->get_error_codes() );
+
+		$data = $result->get_error_data();
+		$this->assertIsArray( $data );
+		$this->assertSame( 502, $data['status'] );
+		$this->assertSame( $raw_response, $data['response'] );
+	}
+
+	/**
 	 * Test get_mapping_suggestions surfaces manifest fetch failures.
 	 *
 	 * @return void
