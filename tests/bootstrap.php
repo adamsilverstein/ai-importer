@@ -115,6 +115,24 @@ if ( ! class_exists( 'WP_Error' ) ) {
 			}
 			return $this->error_data[ $code ] ?? null;
 		}
+
+		/**
+		 * Set data for an error code (simplified shim).
+		 *
+		 * Unlike WP 5.1+, which appends previous data to an additional_data
+		 * stack, this shim simply overwrites any existing data for the code.
+		 *
+		 * @param mixed  $data Error data.
+		 * @param string $code Error code; defaults to the first code.
+		 */
+		public function add_data( $data, $code = '' ) {
+			if ( empty( $code ) ) {
+				$code = $this->get_error_codes()[0] ?? '';
+			}
+			if ( '' !== $code ) {
+				$this->error_data[ $code ] = $data;
+			}
+		}
 	}
 }
 
