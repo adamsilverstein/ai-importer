@@ -66,6 +66,12 @@ class TumblrAdapterTest extends TestCase {
 		Functions\when( 'delete_transient' )->justReturn( true );
 		Functions\when( 'get_bloginfo' )->justReturn( '6.7' );
 		Functions\when( 'wp_strip_all_tags' )->alias( 'strip_tags' );
+		Functions\when( 'wp_basename' )->alias( 'basename' );
+		Functions\when( 'wp_tempnam' )->alias(
+			static function () {
+				return tempnam( sys_get_temp_dir(), 'ai_importer_test_' );
+			}
+		);
 	}
 
 	/**
@@ -321,7 +327,8 @@ class TumblrAdapterTest extends TestCase {
 	}
 
 	/**
-	 * Test fetch_item extracts media URLs from photo posts.
+	 * Test fetch_item extracts media URLs from photo posts and resolves
+	 * archive-relative references to extracted local files.
 	 *
 	 * @return void
 	 */
@@ -335,10 +342,15 @@ class TumblrAdapterTest extends TestCase {
 		$item = $this->adapter->fetch_item( $found[0] );
 
 		$this->assertContains( 'media/sunset.jpg', $item['media_urls'] );
+
+		$index = array_search( 'media/sunset.jpg', $item['media_urls'], true );
+		$this->assertIsString( $item['media_paths'][ $index ] );
+		$this->assertFileExists( $item['media_paths'][ $index ] );
 	}
 
 	/**
-	 * Test fetch_item extracts video src and poster URLs.
+	 * Test fetch_item extracts video src and poster URLs and resolves
+	 * both to extracted local files.
 	 *
 	 * @return void
 	 */
@@ -353,6 +365,85 @@ class TumblrAdapterTest extends TestCase {
 
 		$this->assertContains( 'media/reel.mp4', $item['media_urls'] );
 		$this->assertContains( 'media/reel-poster.jpg', $item['media_urls'] );
+
+		$this->assertSameSize( $item['media_urls'], $item['media_paths'] );
+
+		foreach ( array( 'media/reel.mp4', 'media/reel-poster.jpg' ) as $url ) {
+			$index = array_search( $url, $item['media_urls'], true );
+			$this->assertIsString( $item['media_paths'][ $index ] );
+			$this->assertFileExists( $item['media_paths'][ $index ] );
+		}
+	}
+
+	/**
+	 * Test absolute http(s) media URLs are not extracted from the archive
+	 * while archive-relative references alongside them still are.
+	 *
+	 * @return void
+	 */
+	public function test_fetch_item_leaves_remote_media_urls_untouched(): void {
+		$tmp = tempnam( sys_get_temp_dir(), 'ai_importer_tumblr_' ) . '.zip';
+		$zip = new \ZipArchive();
+		$zip->open( $tmp, \ZipArchive::CREATE );
+		$zip->addFromString(
+			'posts/1.html',
+			'<!DOCTYPE html><html><head><title>Mixed</title></head><body>'
+			. '<article data-post-type="photo"><section class="post-content">'
+			. '<img src="https://example.com/remote.jpg" alt="Remote">'
+			. '<img src="media/local.jpg" alt="Local">'
+			. '</section></article></body></html>'
+		);
+		$zip->addFromString( 'media/local.jpg', 'stub' );
+		$zip->close();
+
+		$this->assertTrue( $this->adapter->authenticate( array( 'file' => $tmp ) ) );
+
+		$item = $this->adapter->fetch_item( '1' );
+
+		$remote_index = array_search( 'https://example.com/remote.jpg', $item['media_urls'], true );
+		$local_index  = array_search( 'media/local.jpg', $item['media_urls'], true );
+
+		$this->assertNotFalse( $remote_index );
+		$this->assertNotFalse( $local_index );
+		$this->assertNull( $item['media_paths'][ $remote_index ] );
+		$this->assertIsString( $item['media_paths'][ $local_index ] );
+		$this->assertFileExists( $item['media_paths'][ $local_index ] );
+		$this->assertSame( 'stub', file_get_contents( $item['media_paths'][ $local_index ] ) );
+
+		unlink( $tmp );
+	}
+
+	/**
+	 * Test media referenced relative to the post HTML file
+	 * (`../media/...`) resolves even when the export lives in a
+	 * subdirectory of the ZIP.
+	 *
+	 * @return void
+	 */
+	public function test_fetch_item_resolves_parent_relative_media_in_prefixed_archive(): void {
+		$tmp = tempnam( sys_get_temp_dir(), 'ai_importer_tumblr_' ) . '.zip';
+		$zip = new \ZipArchive();
+		$zip->open( $tmp, \ZipArchive::CREATE );
+		$zip->addFromString(
+			'backup/posts/2.html',
+			'<!DOCTYPE html><html><head><title>Nested</title></head><body>'
+			. '<article data-post-type="photo"><section class="post-content">'
+			. '<img src="../media/nested.jpg" alt="Nested">'
+			. '</section></article></body></html>'
+		);
+		$zip->addFromString( 'backup/media/nested.jpg', 'nested-stub' );
+		$zip->close();
+
+		$this->assertTrue( $this->adapter->authenticate( array( 'file' => $tmp ) ) );
+
+		$item = $this->adapter->fetch_item( '2' );
+
+		$this->assertSame( array( '../media/nested.jpg' ), $item['media_urls'] );
+		$this->assertIsString( $item['media_paths'][0] );
+		$this->assertFileExists( $item['media_paths'][0] );
+		$this->assertSame( 'nested-stub', file_get_contents( $item['media_paths'][0] ) );
+
+		unlink( $tmp );
 	}
 
 	/**

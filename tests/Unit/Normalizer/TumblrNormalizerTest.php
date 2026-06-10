@@ -208,5 +208,95 @@ class TumblrNormalizerTest extends TestCase {
 			'https://example.com/img/a.jpg',
 			$item->media[0]->source_url
 		);
+		$this->assertNull( $item->media[0]->local_path );
+	}
+
+	/**
+	 * Test normalize sets local_path from media_paths for archive media
+	 * while leaving absolute http(s) URLs to the download path.
+	 *
+	 * @return void
+	 */
+	public function test_normalize_sets_local_path_for_archive_media(): void {
+		$tmp = tempnam( sys_get_temp_dir(), 'ai_importer_test_' );
+
+		$item = $this->normalizer->normalize(
+			$this->make_raw(
+				array(
+					'media_urls'  => array( 'media/sunset.jpg', 'https://example.com/img/a.jpg' ),
+					'media_paths' => array( $tmp, null ),
+				)
+			)
+		);
+
+		$this->assertCount( 2, $item->media );
+
+		$this->assertSame( 'media/sunset.jpg', $item->media[0]->source_url );
+		$this->assertSame( $tmp, $item->media[0]->local_path );
+		$this->assertFileExists( $item->media[0]->local_path );
+
+		$this->assertSame( 'https://example.com/img/a.jpg', $item->media[1]->source_url );
+		$this->assertNull( $item->media[1]->local_path );
+
+		unlink( $tmp );
+	}
+
+	/**
+	 * Test the full adapter-to-normalizer flow: relative media paths in
+	 * the fixture ZIP end up as existing absolute local_path values on
+	 * MediaReference objects.
+	 *
+	 * @return void
+	 */
+	public function test_normalize_fixture_archive_media_resolves_to_local_files(): void {
+		$stored = array();
+
+		Functions\when( 'get_option' )->alias(
+			static function ( $key, $default_value = false ) use ( &$stored ) {
+				return $stored[ $key ] ?? $default_value;
+			}
+		);
+		Functions\when( 'update_option' )->alias(
+			static function ( $key, $value ) use ( &$stored ) {
+				$stored[ $key ] = $value;
+				return true;
+			}
+		);
+		Functions\when( 'delete_option' )->justReturn( true );
+		Functions\when( 'get_transient' )->justReturn( false );
+		Functions\when( 'set_transient' )->justReturn( true );
+		Functions\when( 'delete_transient' )->justReturn( true );
+		Functions\when( 'get_bloginfo' )->justReturn( '6.7' );
+		Functions\when( 'wp_tempnam' )->alias(
+			static function () {
+				return tempnam( sys_get_temp_dir(), 'ai_importer_test_' );
+			}
+		);
+
+		$adapter = new \AI_Importer\Adapters\TumblrAdapter();
+		$fixture = dirname( __DIR__, 2 ) . '/fixtures/tumblr-export.zip';
+
+		$this->assertTrue( $adapter->authenticate( array( 'file' => $fixture ) ) );
+
+		// Post 300 is the photo post referencing media/sunset.jpg.
+		$item = $this->normalizer->normalize( $adapter->fetch_item( '300' ) );
+
+		$this->assertNotEmpty( $item->media );
+
+		$sunset = null;
+		foreach ( $item->media as $reference ) {
+			if ( 'media/sunset.jpg' === $reference->source_url ) {
+				$sunset = $reference;
+			}
+		}
+
+		$this->assertNotNull( $sunset );
+		$this->assertIsString( $sunset->local_path );
+		$this->assertMatchesRegularExpression(
+			'#^(?:/|[A-Za-z]:[/\\\\])#',
+			$sunset->local_path,
+			'local_path should be an absolute filesystem path.'
+		);
+		$this->assertFileExists( $sunset->local_path );
 	}
 }
