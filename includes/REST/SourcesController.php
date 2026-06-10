@@ -468,7 +468,7 @@ class SourcesController extends WP_REST_Controller {
 	}
 
 	/**
-	 * Lazily build the content analyzer, sharing an AIService.
+	 * Lazily build the content analyzer with its own AIService instance.
 	 *
 	 * @return ContentAnalyzer
 	 */
@@ -494,7 +494,7 @@ class SourcesController extends WP_REST_Controller {
 	}
 
 	/**
-	 * Lazily build the mapping suggester, sharing an AIService.
+	 * Lazily build the mapping suggester with its own AIService instance.
 	 *
 	 * @return MappingSuggester
 	 */
