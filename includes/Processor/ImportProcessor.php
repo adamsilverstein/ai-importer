@@ -154,6 +154,12 @@ class ImportProcessor {
 			return;
 		}
 
+		// Record when processing actually began so progress ETA can be computed.
+		if ( empty( $batch['started_at'] ) ) {
+			$batch['started_at'] = gmdate( 'c' );
+			update_option( 'ai_importer_batch_' . $batch_id, $batch, false );
+		}
+
 		$adapter = AdapterRegistry::get_instance()->get( $batch['source_adapter'] );
 
 		if ( ! $adapter ) {
