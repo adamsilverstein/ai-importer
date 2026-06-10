@@ -3,7 +3,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import {
 	Button,
 	Card,
@@ -17,6 +17,44 @@ import {
 	resumeImport,
 	rollbackImport,
 } from '../api';
+
+/**
+ * Format an ETA in seconds as a human-friendly string.
+ *
+ * @param {number} seconds Estimated seconds remaining.
+ * @return {string} Human-readable time remaining.
+ */
+function formatEta( seconds ) {
+	if ( seconds < 60 ) {
+		return __( 'less than a minute remaining', 'ai-importer' );
+	}
+
+	if ( seconds < 3600 ) {
+		const minutes = Math.round( seconds / 60 );
+		return sprintf(
+			/* translators: %d: number of minutes remaining. */
+			_n(
+				'about %d minute remaining',
+				'about %d minutes remaining',
+				minutes,
+				'ai-importer'
+			),
+			minutes
+		);
+	}
+
+	const hours = Math.round( seconds / 3600 );
+	return sprintf(
+		/* translators: %d: number of hours remaining. */
+		_n(
+			'about %d hour remaining',
+			'about %d hours remaining',
+			hours,
+			'ai-importer'
+		),
+		hours
+	);
+}
 
 /**
  * ImportProgress component shows real-time import status.
@@ -185,6 +223,22 @@ export default function ImportProgress( { batchId, onComplete } ) {
 								{ __( 'failed', 'ai-importer' ) }
 							</span>
 						) }
+						{ isActive &&
+							Number.isFinite( progress.eta_seconds ) && (
+								<span className="ai-importer-progress__eta">
+									{ formatEta( progress.eta_seconds ) }
+								</span>
+							) }
+						{ isActive &&
+							Number.isFinite( progress.items_per_minute ) && (
+								<span className="ai-importer-progress__rate">
+									{ sprintf(
+										/* translators: %s: number of items imported per minute. */
+										__( '%s items/min', 'ai-importer' ),
+										progress.items_per_minute
+									) }
+								</span>
+							) }
 					</div>
 
 					{ progress.errors?.length > 0 && (
