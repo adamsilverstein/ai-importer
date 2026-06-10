@@ -179,6 +179,12 @@ export default function ImportProgress( { batchId, onComplete } ) {
 							{ progress.processed } / { progress.total }{ ' ' }
 							{ __( 'processed', 'ai-importer' ) }
 						</span>
+						{ progress.skipped > 0 && (
+							<span className="ai-importer-progress__skipped">
+								{ progress.skipped }{ ' ' }
+								{ __( 'skipped', 'ai-importer' ) }
+							</span>
+						) }
 						{ progress.failed > 0 && (
 							<span className="ai-importer-progress__failed">
 								{ progress.failed }{ ' ' }
