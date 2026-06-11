@@ -50,21 +50,22 @@ class ContentCreator {
 	/**
 	 * Create a WordPress post from a normalized item.
 	 *
-	 * @param NormalizedItem $item     The normalized content.
-	 * @param string         $batch_id The import batch UUID.
+	 * @param NormalizedItem       $item     The normalized content.
+	 * @param string               $batch_id The import batch UUID.
+	 * @param array<string, mixed> $mapping  Optional mapping configuration (see MappingConfig).
 	 * @return int The created post ID.
 	 * @throws RuntimeException On wp_insert_post failure.
 	 */
-	public function create( NormalizedItem $item, string $batch_id ): int {
+	public function create( NormalizedItem $item, string $batch_id, array $mapping = array() ): int {
 		$gmt_date = $item->publish_date->setTimezone( new DateTimeZone( 'UTC' ) );
 
 		$post_args = array(
 			'post_title'    => $item->title ? $item->title : $item->generate_title(),
 			'post_content'  => $item->content,
-			'post_status'   => 'draft',
+			'post_status'   => $this->resolve_post_status( $mapping ),
 			'post_date'     => $item->publish_date->format( 'Y-m-d H:i:s' ),
 			'post_date_gmt' => $gmt_date->format( 'Y-m-d H:i:s' ),
-			'post_type'     => 'post',
+			'post_type'     => $this->resolve_post_type( $item, $mapping ),
 		);
 
 		/**
@@ -105,8 +106,12 @@ class ContentCreator {
 			update_post_meta( $post_id, self::META_SEO_DESCRIPTION, $item->metadata[ $seo_key ] );
 		}
 
-		// Set tags from hashtags.
-		if ( $item->has_tags() ) {
+		// Apply taxonomy mappings; default hashtag handling applies unless
+		// a mapping explicitly routes hashtags elsewhere.
+		$hashtags_handled = $this->apply_taxonomy_mappings( $post_id, $item, $mapping );
+
+		// Set tags from hashtags (default behavior).
+		if ( ! $hashtags_handled && $item->has_tags() ) {
 			wp_set_post_tags( $post_id, $item->tags );
 		}
 
@@ -127,6 +132,101 @@ class ContentCreator {
 		do_action( 'ai_importer_post_created', $post_id, $item, $batch_id );
 
 		return $post_id;
+	}
+
+	/**
+	 * Resolve the destination post type for an item.
+	 *
+	 * Per-content-type overrides from the mapping win over the mapping's
+	 * default post type, which wins over the built-in 'post' default.
+	 *
+	 * @param NormalizedItem       $item    The normalized item.
+	 * @param array<string, mixed> $mapping Mapping configuration.
+	 * @return string Post type slug.
+	 */
+	private function resolve_post_type( NormalizedItem $item, array $mapping ): string {
+		$post_type = 'post';
+
+		if ( ! empty( $mapping['post_type'] ) && is_string( $mapping['post_type'] ) ) {
+			$post_type = $mapping['post_type'];
+		}
+
+		if ( ! empty( $mapping['post_type_mappings'] ) && is_array( $mapping['post_type_mappings'] ) ) {
+			foreach ( $mapping['post_type_mappings'] as $entry ) {
+				if ( is_array( $entry )
+					&& isset( $entry['source_content_type'], $entry['destination_post_type'] )
+					&& $entry['source_content_type'] === $item->content_type->value
+					&& is_string( $entry['destination_post_type'] )
+					&& '' !== $entry['destination_post_type']
+				) {
+					$post_type = $entry['destination_post_type'];
+					break;
+				}
+			}
+		}
+
+		return $post_type;
+	}
+
+	/**
+	 * Resolve the post status from the mapping, defaulting to 'draft'.
+	 *
+	 * @param array<string, mixed> $mapping Mapping configuration.
+	 * @return string Post status.
+	 */
+	private function resolve_post_status( array $mapping ): string {
+		if ( ! empty( $mapping['post_status'] ) && is_string( $mapping['post_status'] ) ) {
+			return $mapping['post_status'];
+		}
+
+		return 'draft';
+	}
+
+	/**
+	 * Apply configured taxonomy mappings to a created post.
+	 *
+	 * A mapping with source_signal "hashtags" assigns the item's tags to
+	 * the destination taxonomy (taking over default hashtag handling).
+	 * Other mappings assign their fixed destination_terms.
+	 *
+	 * @param int                  $post_id The created post ID.
+	 * @param NormalizedItem       $item    The normalized item.
+	 * @param array<string, mixed> $mapping Mapping configuration.
+	 * @return bool True when a mapping handled the item's hashtags.
+	 */
+	private function apply_taxonomy_mappings( int $post_id, NormalizedItem $item, array $mapping ): bool {
+		if ( empty( $mapping['taxonomy_mappings'] ) || ! is_array( $mapping['taxonomy_mappings'] ) ) {
+			return false;
+		}
+
+		$hashtags_handled = false;
+
+		foreach ( $mapping['taxonomy_mappings'] as $entry ) {
+			if ( ! is_array( $entry )
+				|| empty( $entry['source_signal'] )
+				|| empty( $entry['destination_taxonomy'] )
+				|| ! is_string( $entry['destination_taxonomy'] )
+			) {
+				continue;
+			}
+
+			if ( 'hashtags' === $entry['source_signal'] ) {
+				$hashtags_handled = true;
+				$terms            = $item->tags;
+			} else {
+				$terms = isset( $entry['destination_terms'] ) && is_array( $entry['destination_terms'] )
+					? $entry['destination_terms']
+					: array();
+			}
+
+			if ( empty( $terms ) ) {
+				continue;
+			}
+
+			wp_set_object_terms( $post_id, $terms, $entry['destination_taxonomy'], true );
+		}
+
+		return $hashtags_handled;
 	}
 
 	/**

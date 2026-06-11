@@ -396,6 +396,75 @@
 	}
 }
 
+// Mapping configuration
+.ai-importer-mapping {
+
+	&__loading {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 16px 0;
+	}
+
+	&__summary {
+		margin-bottom: 16px;
+		padding: 12px;
+		background: #f0f6fc;
+		border-left: 4px solid #007cba;
+
+		h3 {
+			margin: 0 0 4px;
+		}
+
+		p {
+			margin: 0;
+		}
+	}
+
+	&__controls {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+		gap: 16px;
+		margin-bottom: 16px;
+	}
+
+	&__section {
+		margin-bottom: 16px;
+		padding-top: 16px;
+		border-top: 1px solid #e0e0e0;
+
+		h3 {
+			margin: 0 0 8px;
+		}
+	}
+
+	&__row {
+		margin-bottom: 12px;
+	}
+
+	&__reasoning,
+	&__help {
+		margin: 4px 0 0;
+		font-size: 12px;
+		font-style: italic;
+		color: #757575;
+	}
+
+	&__secondary-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		margin-bottom: 16px;
+	}
+
+	&__actions {
+		display: flex;
+		gap: 8px;
+		padding-top: 16px;
+		border-top: 1px solid #e0e0e0;
+	}
+}
+
 // Status badges (shared)
 .ai-importer-status {
 	display: inline-block;

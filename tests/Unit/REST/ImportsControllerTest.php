@@ -135,6 +135,76 @@ class ImportsControllerTest extends TestCase {
 	}
 
 	/**
+	 * Test create_item stores a sanitized mapping on the batch.
+	 *
+	 * @return void
+	 */
+	public function test_create_item_stores_sanitized_mapping(): void {
+		$this->register_mock_adapter( 'twitter', true );
+
+		Functions\when( 'sanitize_key' )->alias(
+			function ( $key ) {
+				return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $key ) );
+			}
+		);
+		Functions\when( 'sanitize_text_field' )->alias(
+			function ( $value ) {
+				return trim( (string) $value );
+			}
+		);
+
+		$request = new WP_REST_Request( 'POST', '/ai-importer/v1/imports' );
+		$request->set_body_params(
+			array(
+				'source_adapter' => 'twitter',
+				'item_ids'       => array( 'tweet-1' ),
+				'mapping'        => array(
+					'post_type'     => 'page',
+					'post_status'   => 'publish',
+					'unknown_field' => 'evil',
+				),
+			)
+		);
+
+		$result = $this->controller->create_item( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $result );
+
+		$batch = $this->options['ai_importer_batch_test-uuid-1234'];
+
+		$this->assertSame(
+			array(
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+			),
+			$batch['mapping']
+		);
+	}
+
+	/**
+	 * Test create_item defaults to an empty mapping when none is supplied.
+	 *
+	 * @return void
+	 */
+	public function test_create_item_defaults_to_empty_mapping(): void {
+		$this->register_mock_adapter( 'twitter', true );
+
+		$request = new WP_REST_Request( 'POST', '/ai-importer/v1/imports' );
+		$request->set_body_params(
+			array(
+				'source_adapter' => 'twitter',
+				'item_ids'       => array( 'tweet-1' ),
+			)
+		);
+
+		$this->controller->create_item( $request );
+
+		$batch = $this->options['ai_importer_batch_test-uuid-1234'];
+
+		$this->assertSame( array(), $batch['mapping'] );
+	}
+
+	/**
 	 * Test create_item rejects unknown adapter.
 	 *
 	 * @return void

@@ -73,22 +73,73 @@ export function fetchManifest( sourceId ) {
 }
 
 /**
+ * Fetch AI mapping suggestions for a connected source.
+ *
+ * @param {string} sourceId The adapter ID.
+ * @return {Promise<Object>} Suggestions, analysis, and site schema.
+ */
+export function fetchMappingSuggestions( sourceId ) {
+	return apiFetch( {
+		path: `${ API_BASE }/sources/${ sourceId }/mapping-suggestions`,
+	} );
+}
+
+/**
+ * Fetch the saved mapping configuration for a source.
+ *
+ * @param {string} sourceId The adapter ID.
+ * @return {Promise<Object>} Saved mapping (mapping is null when none saved).
+ */
+export function fetchSavedMapping( sourceId ) {
+	return apiFetch( {
+		path: `${ API_BASE }/sources/${ sourceId }/mappings`,
+	} );
+}
+
+/**
+ * Save a mapping configuration for reuse.
+ *
+ * @param {string} sourceId The adapter ID.
+ * @param {Object} mapping  Mapping configuration to persist.
+ * @return {Promise<Object>} Saved mapping data.
+ */
+export function saveMapping( sourceId, mapping ) {
+	return apiFetch( {
+		path: `${ API_BASE }/sources/${ sourceId }/mappings`,
+		method: 'POST',
+		data: { mapping },
+	} );
+}
+
+/**
  * Start a new import batch.
  *
  * @param {string}   sourceAdapter  The adapter ID.
  * @param {string[]} itemIds        Manifest item IDs to import.
+ * @param {?Object}  mapping        Optional mapping configuration to apply.
  * @param {boolean}  updateExisting Update already-imported items instead of skipping them.
  * @return {Promise<Object>} Created batch data.
  */
-export function startImport( sourceAdapter, itemIds, updateExisting = false ) {
+export function startImport(
+	sourceAdapter,
+	itemIds,
+	mapping = null,
+	updateExisting = false
+) {
+	const data = {
+		source_adapter: sourceAdapter,
+		item_ids: itemIds,
+		update_existing: updateExisting,
+	};
+
+	if ( mapping ) {
+		data.mapping = mapping;
+	}
+
 	return apiFetch( {
 		path: `${ API_BASE }/imports`,
 		method: 'POST',
-		data: {
-			source_adapter: sourceAdapter,
-			item_ids: itemIds,
-			update_existing: updateExisting,
-		},
+		data,
 	} );
 }
 
