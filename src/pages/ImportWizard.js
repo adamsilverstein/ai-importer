@@ -14,6 +14,7 @@ import {
 import SourceCard from '../components/SourceCard';
 import FileUpload from '../components/FileUpload';
 import ContentReview from '../components/ContentReview';
+import MappingConfiguration from '../components/MappingConfiguration';
 import ImportProgress from '../components/ImportProgress';
 import {
 	fetchSources,
@@ -25,6 +26,7 @@ import {
 const STEP_SELECT_SOURCE = 'select-source';
 const STEP_CONNECT = 'connect';
 const STEP_REVIEW = 'review';
+const STEP_MAPPING = 'mapping';
 const STEP_IMPORT = 'import';
 const STEP_COMPLETE = 'complete';
 
@@ -38,6 +40,7 @@ export default function ImportWizard() {
 	const [ sources, setSources ] = useState( [] );
 	const [ selectedSource, setSelectedSource ] = useState( null );
 	const [ manifest, setManifest ] = useState( null );
+	const [ pendingItemIds, setPendingItemIds ] = useState( [] );
 	const [ batchId, setBatchId ] = useState( null );
 	const [ completedData, setCompletedData ] = useState( null );
 	const [ error, setError ] = useState( null );
@@ -107,11 +110,21 @@ export default function ImportWizard() {
 		}
 	};
 
-	const handleStartImport = async ( itemIds ) => {
+	const handleReviewContinue = ( itemIds ) => {
+		setPendingItemIds( itemIds );
+		setError( null );
+		setStep( STEP_MAPPING );
+	};
+
+	const handleStartImport = async ( mapping ) => {
 		setLoading( true );
 		setError( null );
 		try {
-			const batch = await startImport( selectedSource.id, itemIds );
+			const batch = await startImport(
+				selectedSource.id,
+				pendingItemIds,
+				mapping
+			);
 			setBatchId( batch.id );
 			setStep( STEP_IMPORT );
 		} catch ( err ) {
@@ -132,6 +145,7 @@ export default function ImportWizard() {
 		setStep( STEP_SELECT_SOURCE );
 		setSelectedSource( null );
 		setManifest( null );
+		setPendingItemIds( [] );
 		setBatchId( null );
 		setCompletedData( null );
 		setError( null );
@@ -163,6 +177,10 @@ export default function ImportWizard() {
 						{
 							key: STEP_REVIEW,
 							label: __( 'Review', 'ai-importer' ),
+						},
+						{
+							key: STEP_MAPPING,
+							label: __( 'Configure Mapping', 'ai-importer' ),
 						},
 						{
 							key: STEP_IMPORT,
@@ -236,7 +254,7 @@ export default function ImportWizard() {
 				<>
 					<ContentReview
 						manifest={ manifest }
-						onImport={ handleStartImport }
+						onImport={ handleReviewContinue }
 						isLoading={ loading }
 					/>
 					<Button
@@ -247,6 +265,15 @@ export default function ImportWizard() {
 						{ __( 'Start over', 'ai-importer' ) }
 					</Button>
 				</>
+			) }
+
+			{ step === STEP_MAPPING && selectedSource && (
+				<MappingConfiguration
+					sourceId={ selectedSource.id }
+					onStartImport={ handleStartImport }
+					onBack={ () => setStep( STEP_REVIEW ) }
+					isLoading={ loading }
+				/>
 			) }
 
 			{ step === STEP_IMPORT && batchId && (
