@@ -102,7 +102,36 @@ class ImportsControllerTest extends TestCase {
 		$this->assertSame( 'processing', $data['state'] );
 		$this->assertSame( 3, $data['total'] );
 		$this->assertSame( 0, $data['processed'] );
+		$this->assertSame( 0, $data['skipped'] );
 		$this->assertSame( 0, $data['percentage'] );
+		$this->assertFalse( $data['update_existing'] );
+	}
+
+	/**
+	 * Test create_item accepts the update_existing flag.
+	 *
+	 * @return void
+	 */
+	public function test_create_item_with_update_existing(): void {
+		$this->register_mock_adapter( 'twitter', true );
+
+		$request = new WP_REST_Request( 'POST', '/ai-importer/v1/imports' );
+		$request->set_body_params(
+			array(
+				'source_adapter'  => 'twitter',
+				'item_ids'        => array( 'tweet-1' ),
+				'update_existing' => true,
+			)
+		);
+
+		$result = $this->controller->create_item( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $result );
+		$this->assertTrue( $result->get_data()['update_existing'] );
+
+		$stored = $this->options['ai_importer_batch_test-uuid-1234'];
+		$this->assertTrue( $stored['update_existing'] );
+		$this->assertSame( 0, $stored['skipped'] );
 	}
 
 	/**
@@ -253,6 +282,26 @@ class ImportsControllerTest extends TestCase {
 		$this->assertSame( 'processing', $result['state'] );
 		$this->assertArrayHasKey( 'percentage', $result );
 		$this->assertArrayHasKey( 'state_label', $result );
+		// Legacy batches without a skipped counter serialize it as zero.
+		$this->assertSame( 0, $result['skipped'] );
+	}
+
+	/**
+	 * Test skipped items count toward the completion percentage.
+	 *
+	 * @return void
+	 */
+	public function test_skipped_items_count_toward_percentage(): void {
+		$this->create_test_batch( 'test-uuid-1234', 'processing', array(), 10, 5 );
+		$this->options['ai_importer_batch_test-uuid-1234']['skipped'] = 3;
+
+		$request             = new WP_REST_Request( 'GET', '/ai-importer/v1/imports/test-uuid-1234' );
+		$request['batch_id'] = 'test-uuid-1234';
+		$response            = $this->controller->get_item( $request );
+		$result              = $response->get_data();
+
+		$this->assertSame( 3, $result['skipped'] );
+		$this->assertSame( 80, $result['percentage'] );
 	}
 
 	/**

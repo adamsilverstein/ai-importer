@@ -114,15 +114,22 @@ export function saveMapping( sourceId, mapping ) {
 /**
  * Start a new import batch.
  *
- * @param {string}   sourceAdapter The adapter ID.
- * @param {string[]} itemIds       Manifest item IDs to import.
- * @param {?Object}  mapping       Optional mapping configuration to apply.
+ * @param {string}   sourceAdapter  The adapter ID.
+ * @param {string[]} itemIds        Manifest item IDs to import.
+ * @param {?Object}  mapping        Optional mapping configuration to apply.
+ * @param {boolean}  updateExisting Update already-imported items instead of skipping them.
  * @return {Promise<Object>} Created batch data.
  */
-export function startImport( sourceAdapter, itemIds, mapping = null ) {
+export function startImport(
+	sourceAdapter,
+	itemIds,
+	mapping = null,
+	updateExisting = false
+) {
 	const data = {
 		source_adapter: sourceAdapter,
 		item_ids: itemIds,
+		update_existing: updateExisting,
 	};
 
 	if ( mapping ) {
