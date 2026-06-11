@@ -75,17 +75,19 @@ export function fetchManifest( sourceId ) {
 /**
  * Start a new import batch.
  *
- * @param {string}   sourceAdapter The adapter ID.
- * @param {string[]} itemIds       Manifest item IDs to import.
+ * @param {string}   sourceAdapter  The adapter ID.
+ * @param {string[]} itemIds        Manifest item IDs to import.
+ * @param {boolean}  updateExisting Update already-imported items instead of skipping them.
  * @return {Promise<Object>} Created batch data.
  */
-export function startImport( sourceAdapter, itemIds ) {
+export function startImport( sourceAdapter, itemIds, updateExisting = false ) {
 	return apiFetch( {
 		path: `${ API_BASE }/imports`,
 		method: 'POST',
 		data: {
 			source_adapter: sourceAdapter,
 			item_ids: itemIds,
+			update_existing: updateExisting,
 		},
 	} );
 }

@@ -201,6 +201,7 @@ class ImportProcessorTest extends TestCase {
 		$this->register_mock_adapter();
 
 		$creator = Mockery::mock( ContentCreator::class );
+		$creator->shouldReceive( 'find_existing' )->andReturn( null );
 		$creator->shouldReceive( 'create' )->andReturn( 100, 101 );
 
 		$media_handler = Mockery::mock( MediaHandler::class );
@@ -234,6 +235,7 @@ class ImportProcessorTest extends TestCase {
 		$this->register_mock_adapter();
 
 		$creator = Mockery::mock( ContentCreator::class );
+		$creator->shouldReceive( 'find_existing' )->andReturn( null );
 		$creator->shouldReceive( 'create' )
 			->once()
 			->andThrow( new \RuntimeException( 'Insert failed' ) );
@@ -268,6 +270,7 @@ class ImportProcessorTest extends TestCase {
 		$this->register_mock_adapter();
 
 		$creator = Mockery::mock( ContentCreator::class );
+		$creator->shouldReceive( 'find_existing' )->andReturn( null );
 		$creator->shouldReceive( 'create' )->andReturn( 100 );
 
 		$media_handler = Mockery::mock( MediaHandler::class );
@@ -358,25 +361,28 @@ class ImportProcessorTest extends TestCase {
 	/**
 	 * Store a test batch in the in-memory options.
 	 *
-	 * @param string        $id       Batch ID.
-	 * @param string        $state    Batch state.
-	 * @param array<string> $item_ids Item IDs.
+	 * @param string        $id              Batch ID.
+	 * @param string        $state           Batch state.
+	 * @param array<string> $item_ids        Item IDs.
+	 * @param bool          $update_existing Whether to update duplicates.
 	 * @return void
 	 */
-	private function store_batch( string $id, string $state, array $item_ids = array( 'item-1' ) ): void {
+	private function store_batch( string $id, string $state, array $item_ids = array( 'item-1' ), bool $update_existing = false ): void {
 		$this->options[ 'ai_importer_batch_' . $id ] = array(
-			'id'             => $id,
-			'source_adapter' => 'twitter',
-			'state'          => $state,
-			'item_ids'       => $item_ids,
-			'total'          => count( $item_ids ),
-			'processed'      => 0,
-			'failed'         => 0,
-			'errors'         => array(),
-			'created_at'     => '2024-01-15T10:00:00+00:00',
-			'started_at'     => '2024-01-15T10:00:00+00:00',
-			'completed_at'   => null,
-			'imported_ids'   => array(),
+			'id'              => $id,
+			'source_adapter'  => 'twitter',
+			'state'           => $state,
+			'item_ids'        => $item_ids,
+			'total'           => count( $item_ids ),
+			'processed'       => 0,
+			'failed'          => 0,
+			'skipped'         => 0,
+			'update_existing' => $update_existing,
+			'errors'          => array(),
+			'created_at'      => '2024-01-15T10:00:00+00:00',
+			'started_at'      => '2024-01-15T10:00:00+00:00',
+			'completed_at'    => null,
+			'imported_ids'    => array(),
 		);
 	}
 
@@ -422,6 +428,7 @@ class ImportProcessorTest extends TestCase {
 		$this->register_mock_adapter();
 
 		$creator = Mockery::mock( ContentCreator::class );
+		$creator->shouldReceive( 'find_existing' )->andReturn( null );
 		$creator->shouldReceive( 'create' )->andReturn( 200, 201 );
 
 		$media_handler = Mockery::mock( MediaHandler::class );
@@ -443,6 +450,121 @@ class ImportProcessorTest extends TestCase {
 		$batch = $this->options['ai_importer_batch_batch-1'];
 		$this->assertSame( 'completed', $batch['state'] );
 		$this->assertSame( 2, $batch['processed'] );
+	}
+
+	/**
+	 * Test process_batch skips duplicates when update_existing is false.
+	 *
+	 * @return void
+	 */
+	public function test_process_batch_skips_duplicates(): void {
+		$this->register_mock_adapter();
+
+		$creator = Mockery::mock( ContentCreator::class );
+		$creator->shouldReceive( 'find_existing' )
+			->twice()
+			->with( 'twitter', 'tweet-1' )
+			->andReturn( 555 );
+		$creator->shouldNotReceive( 'create' );
+		$creator->shouldNotReceive( 'update' );
+
+		$media_handler = Mockery::mock( MediaHandler::class );
+		$media_handler->shouldNotReceive( 'process' );
+
+		$normalizer = $this->create_mock_normalizer();
+
+		Filters\expectApplied( 'ai_importer_normalizers' )
+			->andReturn( array( 'twitter' => $normalizer ) );
+
+		$this->store_batch( 'batch-1', 'processing', array( 'item-1', 'item-2' ) );
+
+		$processor = new ImportProcessor( $creator, $media_handler );
+		$processor->process_batch( 'batch-1' );
+
+		$batch = $this->options['ai_importer_batch_batch-1'];
+		$this->assertSame( 'completed', $batch['state'] );
+		$this->assertSame( 0, $batch['processed'] );
+		$this->assertSame( 0, $batch['failed'] );
+		$this->assertSame( 2, $batch['skipped'] );
+		$this->assertSame( array(), $batch['imported_ids'] );
+		$this->assertSame( array(), $batch['errors'] );
+	}
+
+	/**
+	 * Test process_batch updates duplicates when update_existing is true.
+	 *
+	 * @return void
+	 */
+	public function test_process_batch_updates_duplicates_when_update_existing(): void {
+		$this->register_mock_adapter();
+
+		$creator = Mockery::mock( ContentCreator::class );
+		$creator->shouldReceive( 'find_existing' )
+			->once()
+			->with( 'twitter', 'tweet-1' )
+			->andReturn( 555 );
+		$creator->shouldReceive( 'update' )
+			->once()
+			->with( 555, Mockery::type( NormalizedItem::class ), 'batch-1' )
+			->andReturn( 555 );
+		$creator->shouldNotReceive( 'create' );
+
+		$media_handler = Mockery::mock( MediaHandler::class );
+		$media_handler->shouldReceive( 'process' )->once()->andReturn( array() );
+
+		$normalizer = $this->create_mock_normalizer();
+
+		Filters\expectApplied( 'ai_importer_normalizers' )
+			->andReturn( array( 'twitter' => $normalizer ) );
+
+		$this->store_batch( 'batch-1', 'processing', array( 'item-1' ), true );
+
+		$processor = new ImportProcessor( $creator, $media_handler );
+		$processor->process_batch( 'batch-1' );
+
+		$batch = $this->options['ai_importer_batch_batch-1'];
+		$this->assertSame( 'completed', $batch['state'] );
+		$this->assertSame( 1, $batch['processed'] );
+		$this->assertSame( 0, $batch['skipped'] );
+		$this->assertSame( 0, $batch['failed'] );
+		// Updated posts are not added to imported_ids so rollback
+		// does not delete content from earlier imports.
+		$this->assertSame( array(), $batch['imported_ids'] );
+	}
+
+	/**
+	 * Test process_batch handles legacy batches without skipped counter.
+	 *
+	 * @return void
+	 */
+	public function test_process_batch_handles_legacy_batch_without_skipped(): void {
+		$this->register_mock_adapter();
+
+		$creator = Mockery::mock( ContentCreator::class );
+		$creator->shouldReceive( 'find_existing' )->andReturn( null );
+		$creator->shouldReceive( 'create' )->andReturn( 100 );
+
+		$media_handler = Mockery::mock( MediaHandler::class );
+		$media_handler->shouldReceive( 'process' )->andReturn( array() );
+
+		$normalizer = $this->create_mock_normalizer();
+
+		Filters\expectApplied( 'ai_importer_normalizers' )
+			->andReturn( array( 'twitter' => $normalizer ) );
+
+		$this->store_batch( 'batch-1', 'processing', array( 'item-1' ) );
+		unset(
+			$this->options['ai_importer_batch_batch-1']['skipped'],
+			$this->options['ai_importer_batch_batch-1']['update_existing']
+		);
+
+		$processor = new ImportProcessor( $creator, $media_handler );
+		$processor->process_batch( 'batch-1' );
+
+		$batch = $this->options['ai_importer_batch_batch-1'];
+		$this->assertSame( 'completed', $batch['state'] );
+		$this->assertSame( 1, $batch['processed'] );
+		$this->assertSame( 0, $batch['skipped'] );
 	}
 
 	/**

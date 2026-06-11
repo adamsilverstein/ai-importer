@@ -187,9 +187,16 @@ class ImportProcessor {
 			return;
 		}
 
+		// Older batches may predate the 'skipped' counter.
+		if ( ! isset( $batch['skipped'] ) ) {
+			$batch['skipped'] = 0;
+		}
+
+		$update_existing = ! empty( $batch['update_existing'] );
+
 		$start_time = time();
 		$processed  = 0;
-		$offset     = (int) $batch['processed'] + (int) $batch['failed'];
+		$offset     = (int) $batch['processed'] + (int) $batch['failed'] + (int) $batch['skipped'];
 
 		while ( $processed < self::CHUNK_SIZE && ( time() - $start_time ) < self::TIME_LIMIT ) {
 			$index = $offset + $processed;
@@ -212,26 +219,44 @@ class ImportProcessor {
 				$raw_item   = $adapter->fetch_item( $item_id );
 				$normalized = $normalizer->normalize( $raw_item );
 
-				// Apply AI enhancements (non-fatal failures handled inside).
-				if ( null !== $this->enhancer ) {
-					$this->enhancer->enhance( $normalized );
+				// Detect already-imported content before doing any heavy work.
+				$existing_id = $this->creator->find_existing(
+					$normalized->source_adapter,
+					$normalized->source_id
+				);
+
+				if ( null !== $existing_id && ! $update_existing ) {
+					// Duplicate found and updates not requested — skip.
+					++$batch['skipped'];
+				} else {
+					// Apply AI enhancements (non-fatal failures handled inside).
+					if ( null !== $this->enhancer ) {
+						$this->enhancer->enhance( $normalized );
+					}
+
+					// Sideload media (failures are non-fatal).
+					$media_errors = $this->media_handler->process( $normalized );
+
+					foreach ( $media_errors as $media_error ) {
+						$batch['errors'][] = array(
+							'item_id' => $item_id,
+							'message' => $media_error,
+						);
+					}
+
+					if ( null !== $existing_id ) {
+						// Update the existing post in place. The post is not
+						// added to imported_ids so a rollback of this batch
+						// does not delete content from earlier imports.
+						$this->creator->update( $existing_id, $normalized, $batch_id );
+					} else {
+						// Create the WordPress post.
+						$post_id                 = $this->creator->create( $normalized, $batch_id );
+						$batch['imported_ids'][] = $post_id;
+					}
+
+					++$batch['processed'];
 				}
-
-				// Sideload media (failures are non-fatal).
-				$media_errors = $this->media_handler->process( $normalized );
-
-				foreach ( $media_errors as $media_error ) {
-					$batch['errors'][] = array(
-						'item_id' => $item_id,
-						'message' => $media_error,
-					);
-				}
-
-				// Create the WordPress post.
-				$post_id = $this->creator->create( $normalized, $batch_id );
-
-				++$batch['processed'];
-				$batch['imported_ids'][] = $post_id;
 			} catch ( \Throwable $e ) {
 				++$batch['failed'];
 				$batch['errors'][] = array(
@@ -252,7 +277,7 @@ class ImportProcessor {
 		}
 
 		// Check if all items have been processed.
-		$total_handled = (int) $batch['processed'] + (int) $batch['failed'];
+		$total_handled = (int) $batch['processed'] + (int) $batch['failed'] + (int) $batch['skipped'];
 
 		if ( $total_handled >= count( $batch['item_ids'] ) ) {
 			$batch['state']        = ( count( $batch['item_ids'] ) === (int) $batch['failed'] ) ? 'failed' : 'completed';
