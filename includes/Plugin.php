@@ -15,6 +15,7 @@ use AI_Importer\Adapters\MediumAdapter;
 use AI_Importer\Adapters\SubstackAdapter;
 use AI_Importer\Adapters\TumblrAdapter;
 use AI_Importer\Adapters\TwitterAdapter;
+use AI_Importer\Adapters\YouTubeAdapter;
 use AI_Importer\AI\AIService;
 use AI_Importer\AI\AltTextGenerator;
 use AI_Importer\AI\ContentExpander;
@@ -24,9 +25,11 @@ use AI_Importer\AI\MetaDescriptionGenerator;
 use AI_Importer\AI\TitleGenerator;
 use AI_Importer\Processor\ContentCleaner;
 use AI_Importer\Processor\ImportProcessor;
+use AI_Importer\Processor\ImportScheduler;
 use AI_Importer\Processor\ItemEnhancer;
 use AI_Importer\Processor\MediaHandler;
 use AI_Importer\REST\ImportsController;
+use AI_Importer\REST\SchedulesController;
 use AI_Importer\REST\SourcesController;
 
 /**
@@ -91,6 +94,7 @@ class Plugin {
 		$this->adapter_registry->register( new TumblrAdapter() );
 		$this->adapter_registry->register( new SubstackAdapter() );
 		$this->adapter_registry->register( new GhostAdapter() );
+		$this->adapter_registry->register( new YouTubeAdapter() );
 
 		/**
 		 * Fires when adapters should be registered.
@@ -107,6 +111,11 @@ class Plugin {
 		$media_handler = $this->build_media_handler( $ai_service );
 		$processor     = new ImportProcessor( null, $media_handler, $this->build_item_enhancer( $ai_service ) );
 		$processor->init();
+
+		// Initialize scheduled imports (F10.3). Registers the recurring
+		// Action Scheduler hook so scheduled runs fire on all requests.
+		$scheduler = new ImportScheduler();
+		$scheduler->init();
 
 		// Initialize admin.
 		if ( is_admin() ) {
@@ -129,6 +138,9 @@ class Plugin {
 
 		$imports_controller = new ImportsController();
 		$imports_controller->register_routes();
+
+		$schedules_controller = new SchedulesController();
+		$schedules_controller->register_routes();
 	}
 
 	/**

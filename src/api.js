@@ -203,3 +203,61 @@ export function rollbackImport( batchId ) {
 		method: 'DELETE',
 	} );
 }
+
+/**
+ * Fetch all scheduled imports.
+ *
+ * @return {Promise<Array>} List of schedules.
+ */
+export function fetchSchedules() {
+	return apiFetch( { path: `${ API_BASE }/schedules` } );
+}
+
+/**
+ * Create or update a scheduled import.
+ *
+ * @param {Object}  schedule                Schedule data.
+ * @param {?string} schedule.id             Existing schedule ID to update.
+ * @param {string}  schedule.sourceAdapter  Adapter ID to import from.
+ * @param {string}  schedule.interval       Recurrence (hourly|daily|weekly).
+ * @param {boolean} schedule.updateExisting Update duplicate posts.
+ * @param {boolean} schedule.enabled        Whether the schedule is active.
+ * @return {Promise<Object>} Saved schedule data.
+ */
+export function saveSchedule( {
+	id = null,
+	sourceAdapter,
+	interval,
+	updateExisting = true,
+	enabled = true,
+} ) {
+	const data = {
+		source_adapter: sourceAdapter,
+		interval,
+		update_existing: updateExisting,
+		enabled,
+	};
+
+	if ( id ) {
+		data.id = id;
+	}
+
+	return apiFetch( {
+		path: `${ API_BASE }/schedules`,
+		method: 'POST',
+		data,
+	} );
+}
+
+/**
+ * Delete a scheduled import.
+ *
+ * @param {string} scheduleId The schedule ID.
+ * @return {Promise<Object>} Deletion result.
+ */
+export function deleteSchedule( scheduleId ) {
+	return apiFetch( {
+		path: `${ API_BASE }/schedules/${ scheduleId }`,
+		method: 'DELETE',
+	} );
+}
