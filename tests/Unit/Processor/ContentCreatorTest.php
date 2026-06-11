@@ -12,10 +12,12 @@ use AI_Importer\Normalizer\MediaReference;
 use AI_Importer\Normalizer\NormalizedItem;
 use AI_Importer\Processor\ContentCreator;
 use AI_Importer\Processor\ItemEnhancer;
+use AI_Importer\Schema\CustomTaxonomyRegistrar;
 use AI_Importer\Tests\Unit\TestCase;
 use Brain\Monkey\Actions;
 use Brain\Monkey\Functions;
 use DateTimeImmutable;
+use Mockery;
 
 /**
  * Tests for the ContentCreator class.
@@ -44,7 +46,10 @@ class ContentCreatorTest extends TestCase {
 	protected function set_up(): void {
 		parent::set_up();
 
-		$this->creator   = new ContentCreator();
+		// A registrar that records on-the-fly taxonomy registration requests.
+		$registrar     = Mockery::mock( CustomTaxonomyRegistrar::class );
+		$registrar->shouldReceive( 'ensure_registered' )->byDefault();
+		$this->creator   = new ContentCreator( $registrar );
 		$this->post_meta = array();
 
 		$meta = &$this->post_meta;
@@ -63,6 +68,19 @@ class ContentCreatorTest extends TestCase {
 				return $value;
 			}
 		);
+
+		// Advanced-mapping helpers default to permissive behavior; individual
+		// tests override these as needed.
+		Functions\when( 'sanitize_key' )->alias(
+			function ( $key ) {
+				return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $key ) );
+			}
+		);
+		Functions\when( 'taxonomy_exists' )->justReturn( true );
+		Functions\when( 'get_post_type' )->justReturn( 'post' );
+		Functions\when( 'post_type_supports' )->justReturn( false );
+		Functions\when( 'set_post_format' )->justReturn( array() );
+		Functions\when( 'get_userdata' )->justReturn( false );
 	}
 
 	/**
@@ -367,6 +385,265 @@ class ContentCreatorTest extends TestCase {
 	}
 
 	/**
+	 * Test author mapping sets post_author when the mapped user exists (F9.2).
+	 *
+	 * @return void
+	 */
+	public function test_author_mapping_applied_when_user_exists(): void {
+		Functions\when( 'get_userdata' )->alias(
+			function ( $user_id ) {
+				return 7 === $user_id ? (object) array( 'ID' => 7 ) : false;
+			}
+		);
+
+		$captured = $this->capture_insert_args();
+
+		$this->creator->create(
+			$this->make_item( array( 'author_name' => '@jane' ) ),
+			'batch-abc',
+			array(
+				'author_mappings' => array(
+					array(
+						'source_author'       => '@jane',
+						'destination_user_id' => 7,
+					),
+				),
+			)
+		);
+
+		$this->assertSame( 7, $captured['args']['post_author'] );
+	}
+
+	/**
+	 * Test author mapping falls back to default behavior for unknown users.
+	 *
+	 * @return void
+	 */
+	public function test_author_mapping_falls_back_when_user_missing(): void {
+		// get_userdata returns false (default) so the mapped user is invalid.
+		$captured = $this->capture_insert_args();
+
+		$this->creator->create(
+			$this->make_item( array( 'author_name' => '@jane' ) ),
+			'batch-abc',
+			array(
+				'author_mappings' => array(
+					array(
+						'source_author'       => '@jane',
+						'destination_user_id' => 999,
+					),
+				),
+			)
+		);
+
+		$this->assertArrayNotHasKey( 'post_author', $captured['args'] );
+	}
+
+	/**
+	 * Test the default author ID applies when no source mapping matches (F9.2).
+	 *
+	 * @return void
+	 */
+	public function test_default_author_id_applied(): void {
+		Functions\when( 'get_userdata' )->alias(
+			function ( $user_id ) {
+				return 3 === $user_id ? (object) array( 'ID' => 3 ) : false;
+			}
+		);
+
+		$captured = $this->capture_insert_args();
+
+		$this->creator->create(
+			$this->make_item( array( 'author_name' => '@nobody' ) ),
+			'batch-abc',
+			array(
+				'author_mappings'   => array(
+					array(
+						'source_author'       => '@jane',
+						'destination_user_id' => 7,
+					),
+				),
+				'default_author_id' => 3,
+			)
+		);
+
+		$this->assertSame( 3, $captured['args']['post_author'] );
+	}
+
+	/**
+	 * Test the post format is set when the destination supports formats (F9.4).
+	 *
+	 * @return void
+	 */
+	public function test_post_format_set_when_supported(): void {
+		Functions\when( 'post_type_supports' )->justReturn( true );
+
+		$set_format = array();
+		Functions\when( 'set_post_format' )->alias(
+			function ( $post_id, $format ) use ( &$set_format ) {
+				$set_format[] = array( $post_id, $format );
+				return array();
+			}
+		);
+
+		$this->creator->create(
+			$this->make_item(),
+			'batch-abc',
+			array(
+				'post_format_mappings' => array(
+					array(
+						'source_content_type' => ContentType::POST->value,
+						'post_format'         => 'aside',
+					),
+				),
+			)
+		);
+
+		$this->assertSame( array( array( 42, 'aside' ) ), $set_format );
+	}
+
+	/**
+	 * Test the post format is skipped when the post type lacks support (F9.4).
+	 *
+	 * @return void
+	 */
+	public function test_post_format_skipped_when_unsupported(): void {
+		// post_type_supports defaults to false.
+		$called = false;
+		Functions\when( 'set_post_format' )->alias(
+			function () use ( &$called ) {
+				$called = true;
+				return array();
+			}
+		);
+
+		$this->creator->create(
+			$this->make_item(),
+			'batch-abc',
+			array( 'default_post_format' => 'gallery' )
+		);
+
+		$this->assertFalse( $called, 'set_post_format must not run when unsupported.' );
+	}
+
+	/**
+	 * Test 'standard' clears the post format via a false argument (F9.4).
+	 *
+	 * @return void
+	 */
+	public function test_post_format_standard_clears_format(): void {
+		Functions\when( 'post_type_supports' )->justReturn( true );
+
+		$captured = null;
+		Functions\when( 'set_post_format' )->alias(
+			function ( $post_id, $format ) use ( &$captured ) {
+				$captured = $format;
+				return array();
+			}
+		);
+
+		$this->creator->create(
+			$this->make_item(),
+			'batch-abc',
+			array( 'default_post_format' => 'standard' )
+		);
+
+		$this->assertFalse( $captured );
+	}
+
+	/**
+	 * Test create_if_missing registers the taxonomy before assigning terms (F9.3).
+	 *
+	 * @return void
+	 */
+	public function test_create_if_missing_registers_taxonomy(): void {
+		// The taxonomy does not exist until registered.
+		$exists = array( 'mood' => false );
+		Functions\when( 'taxonomy_exists' )->alias(
+			function ( $taxonomy ) use ( &$exists ) {
+				return $exists[ $taxonomy ] ?? true;
+			}
+		);
+
+		$set_terms = array();
+		Functions\when( 'wp_set_object_terms' )->alias(
+			function ( $post_id, $terms, $taxonomy ) use ( &$set_terms ) {
+				$set_terms[ $taxonomy ] = $terms;
+				return array();
+			}
+		);
+
+		$registrar = Mockery::mock( CustomTaxonomyRegistrar::class );
+		$registrar->shouldReceive( 'ensure_registered' )
+			->once()
+			->with( 'mood', 'Mood', array( 'post' ) )
+			->andReturnUsing(
+				function () use ( &$exists ) {
+					$exists['mood'] = true;
+				}
+			);
+
+		$creator = new ContentCreator( $registrar );
+
+		$item = $this->make_item( array( 'tags' => array( 'happy' ) ) );
+
+		$creator->create(
+			$item,
+			'batch-abc',
+			array(
+				'taxonomy_mappings' => array(
+					array(
+						'source_signal'        => 'hashtags',
+						'destination_taxonomy' => 'mood',
+						'create_if_missing'    => true,
+						'taxonomy_label'       => 'Mood',
+					),
+				),
+			)
+		);
+
+		$this->assertSame( array( 'happy' ), $set_terms['mood'] );
+		$this->assertBrainMonkeyExpectations();
+	}
+
+	/**
+	 * Test meta field mapping copies item metadata to post meta (F9.1).
+	 *
+	 * @return void
+	 */
+	public function test_meta_field_mapping_copies_metadata(): void {
+		$item = $this->make_item(
+			array(
+				'metadata' => array(
+					'location' => 'Brooklyn, NY',
+					'mood'     => 'happy',
+				),
+			)
+		);
+
+		$this->creator->create(
+			$item,
+			'batch-abc',
+			array(
+				'meta_field_mappings' => array(
+					array(
+						'source_field'         => 'location',
+						'destination_meta_key' => 'geo_location',
+					),
+					// Source field absent from metadata: should be skipped.
+					array(
+						'source_field'         => 'missing',
+						'destination_meta_key' => 'ignored',
+					),
+				),
+			)
+		);
+
+		$this->assertSame( 'Brooklyn, NY', $this->post_meta[42]['geo_location'] );
+		$this->assertArrayNotHasKey( 'ignored', $this->post_meta[42] );
+	}
+
+	/**
 	 * Capture the args passed to wp_insert_post.
 	 *
 	 * @return \ArrayObject<string, mixed> Container populated with 'args' on insert.
@@ -528,6 +805,7 @@ class ContentCreatorTest extends TestCase {
 			'media'          => array(),
 			'metadata'       => array(),
 			'engagement'     => array(),
+			'author_name'    => null,
 			'tags'           => array(),
 		);
 
@@ -544,6 +822,7 @@ class ContentCreatorTest extends TestCase {
 			media: $data['media'],
 			metadata: $data['metadata'],
 			engagement: $data['engagement'],
+			author_name: $data['author_name'],
 			tags: $data['tags'],
 		);
 	}

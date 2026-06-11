@@ -220,6 +220,41 @@ class SourcesControllerTest extends TestCase {
 	}
 
 	/**
+	 * Test the mapping-suggestions site_schema exposes users and post formats.
+	 *
+	 * These power the advanced author (F9.2) and post-format (F9.4) controls.
+	 *
+	 * @return void
+	 */
+	public function test_get_mapping_suggestions_site_schema_exposes_users_and_formats(): void {
+		$manifest = $this->build_manifest_with_items( 'twitter', 2 );
+		$adapter  = $this->register_mock_adapter( 'twitter', true );
+		$adapter->shouldReceive( 'fetch_manifest' )->once()->andReturn( $manifest );
+
+		$site_schema = $this->sample_site_schema();
+
+		$content_analyzer = Mockery::mock( ContentAnalyzer::class );
+		$content_analyzer->shouldReceive( 'analyze' )->andReturn( $this->sample_analysis() );
+
+		$schema_analyzer = Mockery::mock( SiteSchemaAnalyzer::class );
+		$schema_analyzer->shouldReceive( 'get_schema' )->andReturn( $site_schema );
+
+		$suggester = Mockery::mock( MappingSuggester::class );
+		$suggester->shouldReceive( 'suggest' )->andReturn( $this->sample_suggestions() );
+
+		$controller    = new SourcesController( $content_analyzer, $schema_analyzer, $suggester );
+		$request       = new WP_REST_Request( 'GET', '/ai-importer/v1/sources/twitter/mapping-suggestions' );
+		$request['id'] = 'twitter';
+
+		$result = $controller->get_mapping_suggestions( $request )->get_data();
+
+		$this->assertArrayHasKey( 'users', $result['site_schema'] );
+		$this->assertArrayHasKey( 'post_formats', $result['site_schema'] );
+		$this->assertSame( 'Admin', $result['site_schema']['users'][0]['display_name'] );
+		$this->assertSame( 'standard', $result['site_schema']['post_formats'][0]['slug'] );
+	}
+
+	/**
 	 * Test get_mapping_suggestions forwards an explicit sample_size to the analyzer.
 	 *
 	 * @return void
@@ -493,18 +528,34 @@ class SourcesControllerTest extends TestCase {
 	 */
 	private function sample_site_schema(): array {
 		return array(
-			'post_types' => array(
+			'post_types'   => array(
 				array(
 					'slug'   => 'post',
 					'name'   => 'Posts',
 					'public' => true,
 				),
 			),
-			'taxonomies' => array(
+			'taxonomies'   => array(
 				array(
 					'slug'       => 'category',
 					'name'       => 'Categories',
 					'post_types' => array( 'post' ),
+				),
+			),
+			'users'        => array(
+				array(
+					'id'           => 1,
+					'display_name' => 'Admin',
+				),
+			),
+			'post_formats' => array(
+				array(
+					'slug' => 'standard',
+					'name' => 'Standard',
+				),
+				array(
+					'slug' => 'aside',
+					'name' => 'Aside',
 				),
 			),
 		);

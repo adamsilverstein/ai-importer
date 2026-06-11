@@ -17,15 +17,85 @@ namespace AI_Importer\Schema;
 class SiteSchemaAnalyzer {
 
 	/**
+	 * Maximum number of users to expose for author mapping.
+	 */
+	private const MAX_USERS = 100;
+
+	/**
 	 * Build a summary of the site's public post types and taxonomies.
 	 *
-	 * @return array{post_types: array<int, array<string, mixed>>, taxonomies: array<int, array<string, mixed>>}
+	 * Also exposes the users available for author mapping (F9.2) and the
+	 * registered post formats (F9.4) so the mapping UI can populate its
+	 * advanced controls.
+	 *
+	 * @return array{post_types: array<int, array<string, mixed>>, taxonomies: array<int, array<string, mixed>>, users: array<int, array<string, mixed>>, post_formats: array<int, array<string, string>>}
 	 */
 	public function get_schema(): array {
 		return array(
-			'post_types' => $this->collect_post_types(),
-			'taxonomies' => $this->collect_taxonomies(),
+			'post_types'   => $this->collect_post_types(),
+			'taxonomies'   => $this->collect_taxonomies(),
+			'users'        => $this->collect_users(),
+			'post_formats' => $this->collect_post_formats(),
 		);
+	}
+
+	/**
+	 * Collect users that can be assigned as post authors (F9.2).
+	 *
+	 * Limited to users who can edit posts and capped at a sensible maximum
+	 * so large sites do not return unbounded data.
+	 *
+	 * @return array<int, array{id: int, display_name: string}>
+	 */
+	private function collect_users(): array {
+		$users = get_users(
+			array(
+				'capability' => 'edit_posts',
+				'number'     => self::MAX_USERS,
+				'orderby'    => 'display_name',
+				'order'      => 'ASC',
+				'fields'     => array( 'ID', 'display_name' ),
+			)
+		);
+
+		$result = array();
+		foreach ( $users as $user ) {
+			$result[] = array(
+				'id'           => (int) $user->ID,
+				'display_name' => (string) $user->display_name,
+			);
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Collect the registered WordPress post formats (F9.4).
+	 *
+	 * Always includes the 'standard' (no format) option first.
+	 *
+	 * @return array<int, array{slug: string, name: string}>
+	 */
+	private function collect_post_formats(): array {
+		$result = array(
+			array(
+				'slug' => 'standard',
+				'name' => __( 'Standard', 'ai-importer' ),
+			),
+		);
+
+		foreach ( get_post_format_strings() as $slug => $name ) {
+			if ( 'standard' === $slug ) {
+				continue;
+			}
+
+			$result[] = array(
+				'slug' => (string) $slug,
+				'name' => (string) $name,
+			);
+		}
+
+		return $result;
 	}
 
 	/**

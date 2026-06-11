@@ -31,6 +31,7 @@ use AI_Importer\Processor\MediaHandler;
 use AI_Importer\REST\ImportsController;
 use AI_Importer\REST\SchedulesController;
 use AI_Importer\REST\SourcesController;
+use AI_Importer\Schema\CustomTaxonomyRegistrar;
 
 /**
  * Plugin class.
@@ -122,6 +123,11 @@ class Plugin {
 			$this->admin = new Admin();
 			$this->admin->init();
 		}
+
+		// Register custom taxonomies requested during import (F9.3). These are
+		// persisted to an option and re-registered on every init so they stay
+		// fully functional after the import request that created them.
+		( new CustomTaxonomyRegistrar() )->init();
 
 		// Register REST API endpoints.
 		add_action( 'rest_api_init', array( $this, 'register_rest_routes' ) );

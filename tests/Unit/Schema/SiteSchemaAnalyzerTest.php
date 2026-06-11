@@ -17,6 +17,24 @@ use Brain\Monkey\Functions;
 class SiteSchemaAnalyzerTest extends TestCase {
 
 	/**
+	 * Set up each test with permissive defaults for the new collectors.
+	 *
+	 * @return void
+	 */
+	protected function set_up(): void {
+		parent::set_up();
+
+		Functions\when( 'get_users' )->justReturn( array() );
+		Functions\when( 'get_post_format_strings' )->justReturn(
+			array(
+				'standard' => 'Standard',
+				'aside'    => 'Aside',
+				'gallery'  => 'Gallery',
+			)
+		);
+	}
+
+	/**
 	 * Build a minimal WP_Post_Type-like stub.
 	 *
 	 * @param string $name   Slug.
@@ -183,5 +201,64 @@ class SiteSchemaAnalyzerTest extends TestCase {
 		$this->assertArrayHasKey( 'slug', $schema['taxonomies'][0] );
 		$this->assertArrayHasKey( 'name', $schema['taxonomies'][0] );
 		$this->assertArrayHasKey( 'post_types', $schema['taxonomies'][0] );
+	}
+
+	/**
+	 * Test the schema exposes users for author mapping (F9.2).
+	 *
+	 * @return void
+	 */
+	public function test_exposes_users(): void {
+		Functions\when( 'get_post_types' )->justReturn( array() );
+		Functions\when( 'get_taxonomies' )->justReturn( array() );
+		Functions\when( 'get_users' )->justReturn(
+			array(
+				(object) array(
+					'ID'           => 5,
+					'display_name' => 'Jane Doe',
+				),
+				(object) array(
+					'ID'           => 8,
+					'display_name' => 'John Roe',
+				),
+			)
+		);
+
+		$analyzer = new SiteSchemaAnalyzer();
+		$schema   = $analyzer->get_schema();
+
+		$this->assertSame(
+			array(
+				array(
+					'id'           => 5,
+					'display_name' => 'Jane Doe',
+				),
+				array(
+					'id'           => 8,
+					'display_name' => 'John Roe',
+				),
+			),
+			$schema['users']
+		);
+	}
+
+	/**
+	 * Test the schema exposes post formats with 'standard' first (F9.4).
+	 *
+	 * @return void
+	 */
+	public function test_exposes_post_formats(): void {
+		Functions\when( 'get_post_types' )->justReturn( array() );
+		Functions\when( 'get_taxonomies' )->justReturn( array() );
+
+		$analyzer = new SiteSchemaAnalyzer();
+		$schema   = $analyzer->get_schema();
+
+		$this->assertSame( 'standard', $schema['post_formats'][0]['slug'] );
+		$slugs = array_column( $schema['post_formats'], 'slug' );
+		$this->assertContains( 'aside', $slugs );
+		$this->assertContains( 'gallery', $slugs );
+		// 'standard' appears exactly once.
+		$this->assertSame( 1, count( array_keys( $slugs, 'standard', true ) ) );
 	}
 }

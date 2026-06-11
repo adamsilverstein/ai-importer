@@ -17,6 +17,7 @@ import {
 	SelectControl,
 	Spinner,
 	TextControl,
+	ToggleControl,
 } from '@wordpress/components';
 import {
 	fetchMappingSuggestions,
@@ -26,6 +27,8 @@ import {
 
 const DEFAULT_POST_TYPE = 'post';
 const DEFAULT_POST_STATUS = 'draft';
+const NO_AUTHOR = '';
+const NO_POST_FORMAT = '';
 
 const POST_STATUS_OPTIONS = [
 	{ label: __( 'Draft', 'ai-importer' ), value: 'draft' },
@@ -53,7 +56,32 @@ function buildInitialMapping( saved, suggestions ) {
 				( entry ) => ( {
 					...entry,
 					destination_terms: entry.destination_terms || [],
+					create_if_missing: !! entry.create_if_missing,
 					reasoning: '',
+				} )
+			),
+			authorMappings: ( saved.author_mappings || [] ).map(
+				( entry ) => ( {
+					source_author: entry.source_author,
+					destination_user_id: String(
+						entry.destination_user_id || ''
+					),
+				} )
+			),
+			defaultAuthorId: saved.default_author_id
+				? String( saved.default_author_id )
+				: NO_AUTHOR,
+			postFormatMappings: ( saved.post_format_mappings || [] ).map(
+				( entry ) => ( {
+					source_content_type: entry.source_content_type,
+					post_format: entry.post_format,
+				} )
+			),
+			defaultPostFormat: saved.default_post_format || NO_POST_FORMAT,
+			metaFieldMappings: ( saved.meta_field_mappings || [] ).map(
+				( entry ) => ( {
+					source_field: entry.source_field,
+					destination_meta_key: entry.destination_meta_key,
 				} )
 			),
 		};
@@ -75,9 +103,20 @@ function buildInitialMapping( saved, suggestions ) {
 					source_signal: entry.source_signal,
 					destination_taxonomy: entry.destination_taxonomy,
 					destination_terms: entry.destination_terms || [],
+					create_if_missing: !! entry.create_if_missing,
 					reasoning: entry.reasoning || '',
 				} )
 			),
+			authorMappings: ( suggestions.detected_authors || [] ).map(
+				( name ) => ( {
+					source_author: name,
+					destination_user_id: NO_AUTHOR,
+				} )
+			),
+			defaultAuthorId: NO_AUTHOR,
+			postFormatMappings: [],
+			defaultPostFormat: NO_POST_FORMAT,
+			metaFieldMappings: [],
 		};
 	}
 
@@ -86,6 +125,11 @@ function buildInitialMapping( saved, suggestions ) {
 		postStatus: DEFAULT_POST_STATUS,
 		postTypeMappings: [],
 		taxonomyMappings: [],
+		authorMappings: [],
+		defaultAuthorId: NO_AUTHOR,
+		postFormatMappings: [],
+		defaultPostFormat: NO_POST_FORMAT,
+		metaFieldMappings: [],
 	};
 }
 
@@ -98,7 +142,7 @@ function buildInitialMapping( saved, suggestions ) {
  * @return {Object} Mapping payload for the REST API.
  */
 function toMappingPayload( mapping ) {
-	return {
+	const payload = {
 		post_type: mapping.postType || DEFAULT_POST_TYPE,
 		post_status: mapping.postStatus || DEFAULT_POST_STATUS,
 		post_type_mappings: mapping.postTypeMappings
@@ -109,12 +153,52 @@ function toMappingPayload( mapping ) {
 			} ) ),
 		taxonomy_mappings: mapping.taxonomyMappings
 			.filter( ( entry ) => entry.destination_taxonomy )
+			.map( ( entry ) => {
+				const out = {
+					source_signal: entry.source_signal,
+					destination_taxonomy: entry.destination_taxonomy,
+					destination_terms: entry.destination_terms,
+				};
+				if ( entry.create_if_missing ) {
+					out.create_if_missing = true;
+				}
+				return out;
+			} ),
+		author_mappings: ( mapping.authorMappings || [] )
+			.filter(
+				( entry ) => entry.source_author && entry.destination_user_id
+			)
 			.map( ( entry ) => ( {
-				source_signal: entry.source_signal,
-				destination_taxonomy: entry.destination_taxonomy,
-				destination_terms: entry.destination_terms,
+				source_author: entry.source_author,
+				destination_user_id: parseInt( entry.destination_user_id, 10 ),
+			} ) ),
+		post_format_mappings: ( mapping.postFormatMappings || [] )
+			.filter(
+				( entry ) => entry.source_content_type && entry.post_format
+			)
+			.map( ( entry ) => ( {
+				source_content_type: entry.source_content_type,
+				post_format: entry.post_format,
+			} ) ),
+		meta_field_mappings: ( mapping.metaFieldMappings || [] )
+			.filter(
+				( entry ) => entry.source_field && entry.destination_meta_key
+			)
+			.map( ( entry ) => ( {
+				source_field: entry.source_field,
+				destination_meta_key: entry.destination_meta_key,
 			} ) ),
 	};
+
+	if ( mapping.defaultAuthorId ) {
+		payload.default_author_id = parseInt( mapping.defaultAuthorId, 10 );
+	}
+
+	if ( mapping.defaultPostFormat ) {
+		payload.default_post_format = mapping.defaultPostFormat;
+	}
+
+	return payload;
 }
 
 /**
@@ -222,13 +306,60 @@ export default function MappingConfiguration( {
 		];
 	}, [ siteSchema ] );
 
-	const handleReset = () => {
-		setMapping( {
-			postType: DEFAULT_POST_TYPE,
-			postStatus: DEFAULT_POST_STATUS,
-			postTypeMappings: [],
-			taxonomyMappings: [],
+	const userOptions = useMemo( () => {
+		const users = siteSchema?.users || [];
+		return [
+			{
+				label: __( 'Use default (current user)', 'ai-importer' ),
+				value: NO_AUTHOR,
+			},
+			...users.map( ( user ) => ( {
+				label: user.display_name,
+				value: String( user.id ),
+			} ) ),
+		];
+	}, [ siteSchema ] );
+
+	const contentTypeOptions = useMemo( () => {
+		// Source content types are surfaced by the post-type mapping
+		// suggestions; fall back to nothing when none were detected.
+		const seen = new Set();
+		const options = [];
+
+		( mapping.postTypeMappings || [] ).forEach( ( entry ) => {
+			if (
+				entry.source_content_type &&
+				! seen.has( entry.source_content_type )
+			) {
+				seen.add( entry.source_content_type );
+				options.push( {
+					label: entry.source_content_type,
+					value: entry.source_content_type,
+				} );
+			}
 		} );
+
+		return options;
+	}, [ mapping.postTypeMappings ] );
+
+	const postFormatOptions = useMemo( () => {
+		const formats = siteSchema?.post_formats || [];
+		const options = formats.map( ( format ) => ( {
+			label: format.name,
+			value: format.slug,
+		} ) );
+
+		return [
+			{
+				label: __( 'Do not assign', 'ai-importer' ),
+				value: NO_POST_FORMAT,
+			},
+			...options,
+		];
+	}, [ siteSchema ] );
+
+	const handleReset = () => {
+		setMapping( buildInitialMapping( null, null ) );
 		setSaveNotice( null );
 	};
 
@@ -277,6 +408,96 @@ export default function MappingConfiguration( {
 			...current,
 			taxonomyMappings: current.taxonomyMappings.map( ( entry, i ) =>
 				i === index ? { ...entry, ...changes } : entry
+			),
+		} ) );
+	};
+
+	const updateAuthorMapping = ( index, destinationUserId ) => {
+		setMapping( ( current ) => ( {
+			...current,
+			authorMappings: current.authorMappings.map( ( entry, i ) =>
+				i === index
+					? { ...entry, destination_user_id: destinationUserId }
+					: entry
+			),
+		} ) );
+	};
+
+	const updatePostFormatMapping = ( index, postFormat ) => {
+		setMapping( ( current ) => ( {
+			...current,
+			postFormatMappings: current.postFormatMappings.map( ( entry, i ) =>
+				i === index ? { ...entry, post_format: postFormat } : entry
+			),
+		} ) );
+	};
+
+	const addPostFormatMapping = () => {
+		const used = new Set(
+			mapping.postFormatMappings.map(
+				( entry ) => entry.source_content_type
+			)
+		);
+		const available = ( contentTypeOptions || [] ).find(
+			( option ) => ! used.has( option.value )
+		);
+
+		setMapping( ( current ) => ( {
+			...current,
+			postFormatMappings: [
+				...current.postFormatMappings,
+				{
+					source_content_type: available ? available.value : '',
+					post_format: NO_POST_FORMAT,
+				},
+			],
+		} ) );
+	};
+
+	const updatePostFormatSource = ( index, sourceContentType ) => {
+		setMapping( ( current ) => ( {
+			...current,
+			postFormatMappings: current.postFormatMappings.map( ( entry, i ) =>
+				i === index
+					? { ...entry, source_content_type: sourceContentType }
+					: entry
+			),
+		} ) );
+	};
+
+	const removePostFormatMapping = ( index ) => {
+		setMapping( ( current ) => ( {
+			...current,
+			postFormatMappings: current.postFormatMappings.filter(
+				( entry, i ) => i !== index
+			),
+		} ) );
+	};
+
+	const addMetaFieldMapping = () => {
+		setMapping( ( current ) => ( {
+			...current,
+			metaFieldMappings: [
+				...current.metaFieldMappings,
+				{ source_field: '', destination_meta_key: '' },
+			],
+		} ) );
+	};
+
+	const updateMetaFieldMapping = ( index, changes ) => {
+		setMapping( ( current ) => ( {
+			...current,
+			metaFieldMappings: current.metaFieldMappings.map( ( entry, i ) =>
+				i === index ? { ...entry, ...changes } : entry
+			),
+		} ) );
+	};
+
+	const removeMetaFieldMapping = ( index ) => {
+		setMapping( ( current ) => ( {
+			...current,
+			metaFieldMappings: current.metaFieldMappings.filter(
+				( entry, i ) => i !== index
 			),
 		} ) );
 	};
@@ -513,6 +734,31 @@ export default function MappingConfiguration( {
 												__nextHasNoMarginBottom
 											/>
 										) }
+										{ entry.destination_taxonomy && (
+											<ToggleControl
+												label={ __(
+													'Create this taxonomy if it does not exist',
+													'ai-importer'
+												) }
+												checked={
+													!! entry.create_if_missing
+												}
+												onChange={ ( value ) =>
+													updateTaxonomyMapping(
+														index,
+														{
+															create_if_missing:
+																value,
+														}
+													)
+												}
+												help={ __(
+													'Registers a new custom taxonomy during import and on subsequent page loads.',
+													'ai-importer'
+												) }
+												__nextHasNoMarginBottom
+											/>
+										) }
 										{ entry.reasoning && (
 											<p className="ai-importer-mapping__reasoning">
 												{ entry.reasoning }
@@ -523,6 +769,181 @@ export default function MappingConfiguration( {
 							) }
 						</div>
 					) }
+
+					{ ( mapping.authorMappings.length > 0 ||
+						userOptions.length > 1 ) && (
+						<div className="ai-importer-mapping__section">
+							<h3>{ __( 'Author mapping', 'ai-importer' ) }</h3>
+							{ mapping.authorMappings.map( ( entry, index ) => (
+								<div
+									key={ `${ entry.source_author }-${ index }` }
+									className="ai-importer-mapping__row"
+								>
+									<SelectControl
+										label={ sprintf(
+											/* translators: %s: source author name. */
+											__(
+												'Posts by "%s" become posts by',
+												'ai-importer'
+											),
+											entry.source_author
+										) }
+										value={ entry.destination_user_id }
+										options={ userOptions }
+										onChange={ ( value ) =>
+											updateAuthorMapping( index, value )
+										}
+										__nextHasNoMarginBottom
+									/>
+								</div>
+							) ) }
+							<SelectControl
+								label={ __(
+									'Default author for imported posts',
+									'ai-importer'
+								) }
+								value={ mapping.defaultAuthorId }
+								options={ userOptions }
+								onChange={ ( value ) =>
+									setMapping( ( current ) => ( {
+										...current,
+										defaultAuthorId: value,
+									} ) )
+								}
+								help={ __(
+									'Applied to imported posts without a matching author mapping above.',
+									'ai-importer'
+								) }
+								__nextHasNoMarginBottom
+							/>
+						</div>
+					) }
+
+					<div className="ai-importer-mapping__section">
+						<h3>{ __( 'Post formats', 'ai-importer' ) }</h3>
+						<SelectControl
+							label={ __( 'Default post format', 'ai-importer' ) }
+							value={ mapping.defaultPostFormat }
+							options={ postFormatOptions }
+							onChange={ ( value ) =>
+								setMapping( ( current ) => ( {
+									...current,
+									defaultPostFormat: value,
+								} ) )
+							}
+							help={ __(
+								'Assigned to imported posts when the destination post type supports post formats.',
+								'ai-importer'
+							) }
+							__nextHasNoMarginBottom
+						/>
+						{ mapping.postFormatMappings.map( ( entry, index ) => (
+							<div
+								key={ `post-format-${ index }` }
+								className="ai-importer-mapping__row"
+							>
+								<SelectControl
+									label={ __(
+										'Content type',
+										'ai-importer'
+									) }
+									value={ entry.source_content_type }
+									options={ contentTypeOptions }
+									onChange={ ( value ) =>
+										updatePostFormatSource( index, value )
+									}
+									__nextHasNoMarginBottom
+								/>
+								<SelectControl
+									label={ __( 'Post format', 'ai-importer' ) }
+									value={ entry.post_format }
+									options={ postFormatOptions }
+									onChange={ ( value ) =>
+										updatePostFormatMapping( index, value )
+									}
+									__nextHasNoMarginBottom
+								/>
+								<Button
+									variant="tertiary"
+									isDestructive
+									onClick={ () =>
+										removePostFormatMapping( index )
+									}
+								>
+									{ __( 'Remove', 'ai-importer' ) }
+								</Button>
+							</div>
+						) ) }
+						{ contentTypeOptions.length > 0 && (
+							<Button
+								variant="secondary"
+								onClick={ addPostFormatMapping }
+							>
+								{ __(
+									'Add content-type format',
+									'ai-importer'
+								) }
+							</Button>
+						) }
+					</div>
+
+					<div className="ai-importer-mapping__section">
+						<h3>{ __( 'Custom field mapping', 'ai-importer' ) }</h3>
+						<p className="ai-importer-mapping__help">
+							{ __(
+								'Copy source metadata into post meta. ACF and Meta Box fields are stored as post meta, so use the field name as the destination key.',
+								'ai-importer'
+							) }
+						</p>
+						{ mapping.metaFieldMappings.map( ( entry, index ) => (
+							<div
+								key={ `meta-field-${ index }` }
+								className="ai-importer-mapping__row"
+							>
+								<TextControl
+									label={ __(
+										'Source field',
+										'ai-importer'
+									) }
+									value={ entry.source_field }
+									onChange={ ( value ) =>
+										updateMetaFieldMapping( index, {
+											source_field: value,
+										} )
+									}
+									__nextHasNoMarginBottom
+								/>
+								<TextControl
+									label={ __(
+										'Destination meta key',
+										'ai-importer'
+									) }
+									value={ entry.destination_meta_key }
+									onChange={ ( value ) =>
+										updateMetaFieldMapping( index, {
+											destination_meta_key: value,
+										} )
+									}
+									__nextHasNoMarginBottom
+								/>
+								<Button
+									variant="tertiary"
+									isDestructive
+									onClick={ () =>
+										removeMetaFieldMapping( index )
+									}
+								>
+									{ __( 'Remove', 'ai-importer' ) }
+								</Button>
+							</div>
+						) ) }
+						<Button
+							variant="secondary"
+							onClick={ addMetaFieldMapping }
+						>
+							{ __( 'Add field mapping', 'ai-importer' ) }
+						</Button>
+					</div>
 
 					<div className="ai-importer-mapping__secondary-actions">
 						<Button

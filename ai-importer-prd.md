@@ -267,12 +267,12 @@ The AI layer provides:
 | F8.4 | Internal linking suggestions |
 
 #### F9: Advanced Mapping
-| ID | Requirement |
-|----|-------------|
-| F9.1 | Custom field mapping (ACF, Meta Box) |
-| F9.2 | Author mapping for multi-author sites |
-| F9.3 | Custom taxonomy creation during import |
-| F9.4 | Post format assignment |
+| ID | Requirement | Status |
+|----|-------------|--------|
+| F9.1 | Custom field mapping (ACF, Meta Box) | Partial — generic item-metadata → post-meta mapping implemented. ACF/Meta Box fields are stored as ordinary post meta so basic value storage is covered; full ACF field-group detection (field keys, repeaters, sub-fields) is out of scope. |
+| F9.2 | Author mapping for multi-author sites | Done — per-source-author → user mapping plus a default author fallback, validated against existing users. |
+| F9.3 | Custom taxonomy creation during import | Done — `create_if_missing` registers the taxonomy on demand and persists it (re-registered on `init` so it stays functional). |
+| F9.4 | Post format assignment | Done — per-content-type and default post format, applied only when the destination post type supports post formats. |
 
 #### F10: Import Management
 | ID | Requirement |
