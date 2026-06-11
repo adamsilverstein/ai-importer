@@ -12,6 +12,7 @@ use AI_Importer\Normalizer\ContentNormalizer;
 use AI_Importer\Normalizer\BloggerNormalizer;
 use AI_Importer\Normalizer\InstagramNormalizer;
 use AI_Importer\Normalizer\MediumNormalizer;
+use AI_Importer\Normalizer\SubstackNormalizer;
 use AI_Importer\Normalizer\TumblrNormalizer;
 use AI_Importer\Normalizer\TwitterNormalizer;
 
@@ -323,6 +324,7 @@ class ImportProcessor {
 				'instagram' => new InstagramNormalizer(),
 				'blogger'   => new BloggerNormalizer(),
 				'tumblr'    => new TumblrNormalizer(),
+				'substack'  => new SubstackNormalizer(),
 			);
 
 			/**
