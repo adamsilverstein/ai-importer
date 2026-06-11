@@ -22,9 +22,11 @@ use AI_Importer\AI\MetaDescriptionGenerator;
 use AI_Importer\AI\TitleGenerator;
 use AI_Importer\Processor\ContentCleaner;
 use AI_Importer\Processor\ImportProcessor;
+use AI_Importer\Processor\ImportScheduler;
 use AI_Importer\Processor\ItemEnhancer;
 use AI_Importer\Processor\MediaHandler;
 use AI_Importer\REST\ImportsController;
+use AI_Importer\REST\SchedulesController;
 use AI_Importer\REST\SourcesController;
 
 /**
@@ -106,6 +108,11 @@ class Plugin {
 		$processor     = new ImportProcessor( null, $media_handler, $this->build_item_enhancer( $ai_service ) );
 		$processor->init();
 
+		// Initialize scheduled imports (F10.3). Registers the recurring
+		// Action Scheduler hook so scheduled runs fire on all requests.
+		$scheduler = new ImportScheduler();
+		$scheduler->init();
+
 		// Initialize admin.
 		if ( is_admin() ) {
 			$this->admin = new Admin();
@@ -127,6 +134,9 @@ class Plugin {
 
 		$imports_controller = new ImportsController();
 		$imports_controller->register_routes();
+
+		$schedules_controller = new SchedulesController();
+		$schedules_controller->register_routes();
 	}
 
 	/**
