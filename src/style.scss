@@ -233,8 +233,17 @@
 	&__toolbar {
 		display: flex;
 		justify-content: space-between;
-		align-items: center;
+		align-items: flex-start;
+		gap: 16px;
+		flex-wrap: wrap;
 		width: 100%;
+	}
+
+	&__filters {
+		display: flex;
+		gap: 12px;
+		align-items: flex-end;
+		flex-wrap: wrap;
 	}
 
 	&__count {
@@ -284,7 +293,8 @@
 		text-transform: capitalize;
 	}
 
-	&__truncated {
+	&__truncated,
+	&__empty {
 		padding: 12px 0;
 		color: #757575;
 		font-style: italic;

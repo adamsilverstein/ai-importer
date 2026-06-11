@@ -252,7 +252,7 @@ class ImportsController extends WP_REST_Controller {
 			'update_existing' => (bool) $request->get_param( 'update_existing' ),
 			'errors'          => array(),
 			'created_at'      => $now,
-			'started_at'      => $now,
+			'started_at'      => null,
 			'completed_at'    => null,
 			'imported_ids'    => array(),
 		);
@@ -433,21 +433,77 @@ class ImportsController extends WP_REST_Controller {
 			'rolled_back' => __( 'Rolled Back', 'ai-importer' ),
 		);
 
+		$eta = self::calculate_eta( $batch );
+
 		return array(
-			'id'              => $batch['id'],
-			'source_adapter'  => $batch['source_adapter'],
-			'state'           => $batch['state'],
-			'state_label'     => $state_labels[ $batch['state'] ] ?? $batch['state'],
-			'total'           => $total,
-			'processed'       => $processed,
-			'failed'          => (int) $batch['failed'],
-			'skipped'         => $skipped,
-			'update_existing' => ! empty( $batch['update_existing'] ),
-			'percentage'      => $percentage,
-			'created_at'      => $batch['created_at'],
-			'started_at'      => $batch['started_at'] ?? null,
-			'completed_at'    => $batch['completed_at'] ?? null,
-			'errors'          => array_slice( $batch['errors'] ?? array(), -50 ),
+			'id'               => $batch['id'],
+			'source_adapter'   => $batch['source_adapter'],
+			'state'            => $batch['state'],
+			'state_label'      => $state_labels[ $batch['state'] ] ?? $batch['state'],
+			'total'            => $total,
+			'processed'        => $processed,
+			'failed'           => (int) $batch['failed'],
+			'skipped'          => $skipped,
+			'update_existing'  => ! empty( $batch['update_existing'] ),
+			'percentage'       => $percentage,
+			'created_at'       => $batch['created_at'],
+			'started_at'       => $batch['started_at'] ?? null,
+			'completed_at'     => $batch['completed_at'] ?? null,
+			'items_per_minute' => $eta['items_per_minute'],
+			'eta_seconds'      => $eta['eta_seconds'],
+			'errors'           => array_slice( $batch['errors'] ?? array(), -50 ),
+		);
+	}
+
+	/**
+	 * Calculate import throughput and estimated time remaining for a batch.
+	 *
+	 * The rate is based on successfully processed items versus elapsed time
+	 * since processing began. No estimate is returned when the batch is not
+	 * actively processing (paused, completed, failed, rolled back), when no
+	 * items have been processed yet, or when no started_at timestamp exists.
+	 *
+	 * @param array<string, mixed> $batch Raw batch data.
+	 * @param int|null             $now   Current Unix timestamp. Defaults to time().
+	 * @return array{items_per_minute: float|null, eta_seconds: int|null}
+	 */
+	public static function calculate_eta( array $batch, ?int $now = null ): array {
+		$none = array(
+			'items_per_minute' => null,
+			'eta_seconds'      => null,
+		);
+
+		if ( 'processing' !== ( $batch['state'] ?? '' ) ) {
+			return $none;
+		}
+
+		$processed = (int) ( $batch['processed'] ?? 0 );
+
+		if ( $processed <= 0 || empty( $batch['started_at'] ) ) {
+			return $none;
+		}
+
+		$started_at = strtotime( (string) $batch['started_at'] );
+
+		if ( false === $started_at ) {
+			return $none;
+		}
+
+		$now     = $now ?? time();
+		$elapsed = $now - $started_at;
+
+		if ( $elapsed <= 0 ) {
+			return $none;
+		}
+
+		$rate      = $processed / $elapsed;
+		$failed    = (int) ( $batch['failed'] ?? 0 );
+		$skipped   = (int) ( $batch['skipped'] ?? 0 );
+		$remaining = max( 0, (int) $batch['total'] - $processed - $failed - $skipped );
+
+		return array(
+			'items_per_minute' => round( $rate * 60, 1 ),
+			'eta_seconds'      => (int) ceil( $remaining / $rate ),
 		);
 	}
 

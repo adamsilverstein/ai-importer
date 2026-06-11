@@ -301,6 +301,64 @@ class ImportProcessorTest extends TestCase {
 	}
 
 	/**
+	 * Test process_batch records started_at when processing begins.
+	 *
+	 * @return void
+	 */
+	public function test_process_batch_records_started_at(): void {
+		$this->register_mock_adapter();
+
+		$creator = Mockery::mock( ContentCreator::class );
+		$creator->shouldReceive( 'create' )->andReturn( 100 );
+
+		$media_handler = Mockery::mock( MediaHandler::class );
+		$media_handler->shouldReceive( 'process' )->andReturn( array() );
+
+		$normalizer = $this->create_mock_normalizer();
+
+		Filters\expectApplied( 'ai_importer_normalizers' )
+			->andReturn( array( 'twitter' => $normalizer ) );
+
+		$this->store_batch( 'batch-1', 'processing', array( 'item-1' ) );
+		$this->options['ai_importer_batch_batch-1']['started_at'] = null;
+
+		$processor = new ImportProcessor( $creator, $media_handler );
+		$processor->process_batch( 'batch-1' );
+
+		$batch = $this->options['ai_importer_batch_batch-1'];
+		$this->assertNotEmpty( $batch['started_at'] );
+		$this->assertNotFalse( strtotime( $batch['started_at'] ) );
+	}
+
+	/**
+	 * Test process_batch preserves an existing started_at timestamp.
+	 *
+	 * @return void
+	 */
+	public function test_process_batch_preserves_existing_started_at(): void {
+		$this->register_mock_adapter();
+
+		$creator = Mockery::mock( ContentCreator::class );
+		$creator->shouldReceive( 'create' )->andReturn( 100 );
+
+		$media_handler = Mockery::mock( MediaHandler::class );
+		$media_handler->shouldReceive( 'process' )->andReturn( array() );
+
+		$normalizer = $this->create_mock_normalizer();
+
+		Filters\expectApplied( 'ai_importer_normalizers' )
+			->andReturn( array( 'twitter' => $normalizer ) );
+
+		$this->store_batch( 'batch-1', 'processing', array( 'item-1' ) );
+
+		$processor = new ImportProcessor( $creator, $media_handler );
+		$processor->process_batch( 'batch-1' );
+
+		$batch = $this->options['ai_importer_batch_batch-1'];
+		$this->assertSame( '2024-01-15T10:00:00+00:00', $batch['started_at'] );
+	}
+
+	/**
 	 * Store a test batch in the in-memory options.
 	 *
 	 * @param string        $id              Batch ID.

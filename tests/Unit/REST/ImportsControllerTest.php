@@ -380,6 +380,177 @@ class ImportsControllerTest extends TestCase {
 	}
 
 	/**
+	 * Test calculate_eta computes throughput and remaining time.
+	 *
+	 * @return void
+	 */
+	public function test_calculate_eta_computes_rate_and_eta(): void {
+		$started_at = '2024-01-15T10:00:00+00:00';
+		$now        = strtotime( $started_at ) + 60;
+
+		$batch = $this->make_eta_batch( 'processing', 20, 5, 1, $started_at );
+
+		$eta = ImportsController::calculate_eta( $batch, $now );
+
+		// 5 items in 60 seconds = 5 items/minute.
+		$this->assertSame( 5.0, $eta['items_per_minute'] );
+		// 14 items remaining at 5/min = 168 seconds.
+		$this->assertSame( 168, $eta['eta_seconds'] );
+	}
+
+	/**
+	 * Test calculate_eta returns null when nothing has been processed yet.
+	 *
+	 * @return void
+	 */
+	public function test_calculate_eta_zero_processed(): void {
+		$batch = $this->make_eta_batch( 'processing', 20, 0, 0, '2024-01-15T10:00:00+00:00' );
+
+		$eta = ImportsController::calculate_eta( $batch, strtotime( '2024-01-15T10:05:00+00:00' ) );
+
+		$this->assertNull( $eta['items_per_minute'] );
+		$this->assertNull( $eta['eta_seconds'] );
+	}
+
+	/**
+	 * Test calculate_eta returns null for paused batches.
+	 *
+	 * @return void
+	 */
+	public function test_calculate_eta_paused_batch(): void {
+		$batch = $this->make_eta_batch( 'paused', 20, 5, 0, '2024-01-15T10:00:00+00:00' );
+
+		$eta = ImportsController::calculate_eta( $batch, strtotime( '2024-01-15T10:01:00+00:00' ) );
+
+		$this->assertNull( $eta['items_per_minute'] );
+		$this->assertNull( $eta['eta_seconds'] );
+	}
+
+	/**
+	 * Test calculate_eta returns null for completed batches.
+	 *
+	 * @return void
+	 */
+	public function test_calculate_eta_completed_batch(): void {
+		$batch = $this->make_eta_batch( 'completed', 20, 20, 0, '2024-01-15T10:00:00+00:00' );
+
+		$eta = ImportsController::calculate_eta( $batch, strtotime( '2024-01-15T10:10:00+00:00' ) );
+
+		$this->assertNull( $eta['items_per_minute'] );
+		$this->assertNull( $eta['eta_seconds'] );
+	}
+
+	/**
+	 * Test calculate_eta returns null when started_at is missing.
+	 *
+	 * @return void
+	 */
+	public function test_calculate_eta_missing_started_at(): void {
+		$batch = $this->make_eta_batch( 'processing', 20, 5, 0, null );
+
+		$eta = ImportsController::calculate_eta( $batch, strtotime( '2024-01-15T10:01:00+00:00' ) );
+
+		$this->assertNull( $eta['items_per_minute'] );
+		$this->assertNull( $eta['eta_seconds'] );
+	}
+
+	/**
+	 * Test calculate_eta returns null when no time has elapsed.
+	 *
+	 * @return void
+	 */
+	public function test_calculate_eta_zero_elapsed(): void {
+		$started_at = '2024-01-15T10:00:00+00:00';
+		$batch      = $this->make_eta_batch( 'processing', 20, 5, 0, $started_at );
+
+		$eta = ImportsController::calculate_eta( $batch, strtotime( $started_at ) );
+
+		$this->assertNull( $eta['items_per_minute'] );
+		$this->assertNull( $eta['eta_seconds'] );
+	}
+
+	/**
+	 * Test calculate_eta returns zero remaining when all items are handled.
+	 *
+	 * @return void
+	 */
+	public function test_calculate_eta_all_items_handled(): void {
+		$started_at = '2024-01-15T10:00:00+00:00';
+		$batch      = $this->make_eta_batch( 'processing', 10, 8, 2, $started_at );
+
+		$eta = ImportsController::calculate_eta( $batch, strtotime( $started_at ) + 60 );
+
+		$this->assertSame( 8.0, $eta['items_per_minute'] );
+		$this->assertSame( 0, $eta['eta_seconds'] );
+	}
+
+	/**
+	 * Test serialized batch includes ETA fields.
+	 *
+	 * @return void
+	 */
+	public function test_get_item_includes_eta_fields(): void {
+		$this->create_test_batch( 'test-uuid-1234', 'processing', array(), 10, 5 );
+
+		$request             = new WP_REST_Request( 'GET', '/ai-importer/v1/imports/test-uuid-1234' );
+		$request['batch_id'] = 'test-uuid-1234';
+		$response            = $this->controller->get_item( $request );
+		$result              = $response->get_data();
+
+		$this->assertArrayHasKey( 'items_per_minute', $result );
+		$this->assertArrayHasKey( 'eta_seconds', $result );
+		// Batch is processing with processed items and a past started_at,
+		// so server-computed values must be present.
+		$this->assertNotNull( $result['items_per_minute'] );
+		$this->assertNotNull( $result['eta_seconds'] );
+	}
+
+	/**
+	 * Test serialized batch returns null ETA fields when not computable.
+	 *
+	 * @return void
+	 */
+	public function test_get_item_eta_fields_null_when_unavailable(): void {
+		// No processed items yet.
+		$this->create_test_batch( 'test-uuid-1234', 'processing', array(), 10, 0 );
+
+		$request             = new WP_REST_Request( 'GET', '/ai-importer/v1/imports/test-uuid-1234' );
+		$request['batch_id'] = 'test-uuid-1234';
+		$response            = $this->controller->get_item( $request );
+		$result              = $response->get_data();
+
+		$this->assertNull( $result['items_per_minute'] );
+		$this->assertNull( $result['eta_seconds'] );
+	}
+
+	/**
+	 * Build a minimal batch array for calculate_eta tests.
+	 *
+	 * @param string      $state      Batch state.
+	 * @param int         $total      Total items.
+	 * @param int         $processed  Processed count.
+	 * @param int         $failed     Failed count.
+	 * @param string|null $started_at Started timestamp (ISO 8601) or null.
+	 * @return array<string, mixed>
+	 */
+	private function make_eta_batch(
+		string $state,
+		int $total,
+		int $processed,
+		int $failed,
+		?string $started_at
+	): array {
+		return array(
+			'id'         => 'eta-batch',
+			'state'      => $state,
+			'total'      => $total,
+			'processed'  => $processed,
+			'failed'     => $failed,
+			'started_at' => $started_at,
+		);
+	}
+
+	/**
 	 * Register a mock adapter in the registry.
 	 *
 	 * @param string $id              Adapter ID.

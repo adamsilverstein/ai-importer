@@ -12,6 +12,7 @@ use AI_Importer\Normalizer\ContentNormalizer;
 use AI_Importer\Normalizer\BloggerNormalizer;
 use AI_Importer\Normalizer\InstagramNormalizer;
 use AI_Importer\Normalizer\MediumNormalizer;
+use AI_Importer\Normalizer\TumblrNormalizer;
 use AI_Importer\Normalizer\TwitterNormalizer;
 
 /**
@@ -152,6 +153,12 @@ class ImportProcessor {
 
 		if ( ! $batch || 'processing' !== $batch['state'] ) {
 			return;
+		}
+
+		// Record when processing actually began so progress ETA can be computed.
+		if ( empty( $batch['started_at'] ) ) {
+			$batch['started_at'] = gmdate( 'c' );
+			update_option( 'ai_importer_batch_' . $batch_id, $batch, false );
 		}
 
 		$adapter = AdapterRegistry::get_instance()->get( $batch['source_adapter'] );
@@ -315,6 +322,7 @@ class ImportProcessor {
 				'medium'    => new MediumNormalizer(),
 				'instagram' => new InstagramNormalizer(),
 				'blogger'   => new BloggerNormalizer(),
+				'tumblr'    => new TumblrNormalizer(),
 			);
 
 			/**

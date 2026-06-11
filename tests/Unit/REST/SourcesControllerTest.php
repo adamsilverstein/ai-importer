@@ -12,12 +12,16 @@ use AI_Importer\Adapters\AdapterRegistry;
 use AI_Importer\Adapters\Manifest\ContentManifest;
 use AI_Importer\Adapters\Manifest\ContentType;
 use AI_Importer\Adapters\Manifest\ManifestItem;
+use AI_Importer\AI\ContentAnalyzer;
+use AI_Importer\AI\MappingSuggester;
 use AI_Importer\REST\SourcesController;
 use AI_Importer\Schema\SettingsSchema;
+use AI_Importer\Schema\SiteSchemaAnalyzer;
 use AI_Importer\Tests\Unit\TestCase;
 use Brain\Monkey\Functions;
 use DateTimeImmutable;
 use Mockery;
+use WP_Error;
 use WP_REST_Request;
 
 /**
@@ -163,6 +167,367 @@ class SourcesControllerTest extends TestCase {
 		$result        = $this->controller->get_manifest( $request );
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
+	}
+
+	/**
+	 * Test get_mapping_suggestions returns analysis, schema, and suggestions on success.
+	 *
+	 * @return void
+	 */
+	public function test_get_mapping_suggestions_returns_payload(): void {
+		$manifest = $this->build_manifest_with_items( 'twitter', 3 );
+		$adapter  = $this->register_mock_adapter( 'twitter', true );
+		$adapter->shouldReceive( 'fetch_manifest' )->once()->andReturn( $manifest );
+
+		$analysis    = $this->sample_analysis();
+		$site_schema = $this->sample_site_schema();
+		$suggestions = $this->sample_suggestions();
+
+		$content_analyzer = Mockery::mock( ContentAnalyzer::class );
+		$content_analyzer->shouldReceive( 'analyze' )
+			->once()
+			->with(
+				Mockery::on(
+					static function ( $items ) {
+						// Items must be passed as a positional array (array_values).
+						return is_array( $items ) && array_keys( $items ) === range( 0, count( $items ) - 1 );
+					}
+				),
+				Mockery::type( 'array' )
+			)
+			->andReturn( $analysis );
+
+		$schema_analyzer = Mockery::mock( SiteSchemaAnalyzer::class );
+		$schema_analyzer->shouldReceive( 'get_schema' )->once()->andReturn( $site_schema );
+
+		$suggester = Mockery::mock( MappingSuggester::class );
+		$suggester->shouldReceive( 'suggest' )
+			->once()
+			->with( $analysis, $site_schema )
+			->andReturn( $suggestions );
+
+		$controller    = new SourcesController( $content_analyzer, $schema_analyzer, $suggester );
+		$request       = new WP_REST_Request( 'GET', '/ai-importer/v1/sources/twitter/mapping-suggestions' );
+		$request['id'] = 'twitter';
+
+		$response = $controller->get_mapping_suggestions( $request );
+		$result   = $response->get_data();
+
+		$this->assertSame( 'twitter', $result['source_id'] );
+		$this->assertSame( $analysis, $result['analysis'] );
+		$this->assertSame( $site_schema, $result['site_schema'] );
+		$this->assertSame( $suggestions, $result['suggestions'] );
+	}
+
+	/**
+	 * Test get_mapping_suggestions forwards an explicit sample_size to the analyzer.
+	 *
+	 * @return void
+	 */
+	public function test_get_mapping_suggestions_forwards_sample_size(): void {
+		$manifest = $this->build_manifest_with_items( 'twitter', 5 );
+		$adapter  = $this->register_mock_adapter( 'twitter', true );
+		$adapter->shouldReceive( 'fetch_manifest' )->once()->andReturn( $manifest );
+
+		$content_analyzer = Mockery::mock( ContentAnalyzer::class );
+		$content_analyzer->shouldReceive( 'analyze' )
+			->once()
+			->with( Mockery::type( 'array' ), array( 'sample_size' => 25 ) )
+			->andReturn( $this->sample_analysis() );
+
+		$schema_analyzer = Mockery::mock( SiteSchemaAnalyzer::class );
+		$schema_analyzer->shouldReceive( 'get_schema' )->andReturn( $this->sample_site_schema() );
+
+		$suggester = Mockery::mock( MappingSuggester::class );
+		$suggester->shouldReceive( 'suggest' )->andReturn( $this->sample_suggestions() );
+
+		$controller             = new SourcesController( $content_analyzer, $schema_analyzer, $suggester );
+		$request                = new WP_REST_Request( 'GET', '/ai-importer/v1/sources/twitter/mapping-suggestions' );
+		$request['id']          = 'twitter';
+		$request['sample_size'] = 25;
+
+		$response = $controller->get_mapping_suggestions( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+	}
+
+	/**
+	 * Test get_mapping_suggestions returns 400 when the source is not connected.
+	 *
+	 * @return void
+	 */
+	public function test_get_mapping_suggestions_not_authenticated(): void {
+		$this->register_mock_adapter( 'twitter', false );
+
+		$request       = new WP_REST_Request( 'GET', '/ai-importer/v1/sources/twitter/mapping-suggestions' );
+		$request['id'] = 'twitter';
+
+		$result = $this->controller->get_mapping_suggestions( $request );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertContains( 'not_authenticated', $result->get_error_codes() );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+	}
+
+	/**
+	 * Test get_mapping_suggestions returns 404 for an unknown source.
+	 *
+	 * @return void
+	 */
+	public function test_get_mapping_suggestions_source_not_found(): void {
+		$request       = new WP_REST_Request( 'GET', '/ai-importer/v1/sources/unknown/mapping-suggestions' );
+		$request['id'] = 'unknown';
+
+		$result = $this->controller->get_mapping_suggestions( $request );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertContains( 'source_not_found', $result->get_error_codes() );
+	}
+
+	/**
+	 * Test get_mapping_suggestions surfaces analyzer failures with a 502 status.
+	 *
+	 * @return void
+	 */
+	public function test_get_mapping_suggestions_propagates_analyzer_error(): void {
+		$manifest = $this->build_manifest_with_items( 'twitter', 1 );
+		$adapter  = $this->register_mock_adapter( 'twitter', true );
+		$adapter->shouldReceive( 'fetch_manifest' )->once()->andReturn( $manifest );
+
+		$content_analyzer = Mockery::mock( ContentAnalyzer::class );
+		$content_analyzer->shouldReceive( 'analyze' )->once()->andReturn(
+			new WP_Error( 'ai_unavailable', 'No provider configured.' )
+		);
+
+		$schema_analyzer = Mockery::mock( SiteSchemaAnalyzer::class );
+		$suggester       = Mockery::mock( MappingSuggester::class );
+
+		$controller    = new SourcesController( $content_analyzer, $schema_analyzer, $suggester );
+		$request       = new WP_REST_Request( 'GET', '/ai-importer/v1/sources/twitter/mapping-suggestions' );
+		$request['id'] = 'twitter';
+
+		$result = $controller->get_mapping_suggestions( $request );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertContains( 'ai_unavailable', $result->get_error_codes() );
+		$this->assertSame( 502, $result->get_error_data()['status'] );
+	}
+
+	/**
+	 * Test get_mapping_suggestions surfaces suggester failures with a 502 status.
+	 *
+	 * @return void
+	 */
+	public function test_get_mapping_suggestions_propagates_suggester_error(): void {
+		$manifest = $this->build_manifest_with_items( 'twitter', 1 );
+		$adapter  = $this->register_mock_adapter( 'twitter', true );
+		$adapter->shouldReceive( 'fetch_manifest' )->once()->andReturn( $manifest );
+
+		$content_analyzer = Mockery::mock( ContentAnalyzer::class );
+		$content_analyzer->shouldReceive( 'analyze' )->once()->andReturn( $this->sample_analysis() );
+
+		$schema_analyzer = Mockery::mock( SiteSchemaAnalyzer::class );
+		$schema_analyzer->shouldReceive( 'get_schema' )->andReturn( $this->sample_site_schema() );
+
+		$suggester = Mockery::mock( MappingSuggester::class );
+		$suggester->shouldReceive( 'suggest' )->once()->andReturn(
+			new WP_Error( 'ai_mapping_malformed', 'Bad response.' )
+		);
+
+		$controller    = new SourcesController( $content_analyzer, $schema_analyzer, $suggester );
+		$request       = new WP_REST_Request( 'GET', '/ai-importer/v1/sources/twitter/mapping-suggestions' );
+		$request['id'] = 'twitter';
+
+		$result = $controller->get_mapping_suggestions( $request );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertContains( 'ai_mapping_malformed', $result->get_error_codes() );
+		$this->assertSame( 502, $result->get_error_data()['status'] );
+	}
+
+	/**
+	 * Test malformed analyzer errors carrying response data still receive a 502 status.
+	 *
+	 * @return void
+	 */
+	public function test_get_mapping_suggestions_sets_status_on_malformed_analyzer_error_with_data(): void {
+		$manifest = $this->build_manifest_with_items( 'twitter', 1 );
+		$adapter  = $this->register_mock_adapter( 'twitter', true );
+		$adapter->shouldReceive( 'fetch_manifest' )->once()->andReturn( $manifest );
+
+		$raw_response = array( 'unexpected' => 'shape' );
+
+		$content_analyzer = Mockery::mock( ContentAnalyzer::class );
+		$content_analyzer->shouldReceive( 'analyze' )->once()->andReturn(
+			new WP_Error(
+				'ai_analyze_malformed',
+				'AI analysis response is missing required field: content_type.',
+				array( 'response' => $raw_response )
+			)
+		);
+
+		$schema_analyzer = Mockery::mock( SiteSchemaAnalyzer::class );
+		$suggester       = Mockery::mock( MappingSuggester::class );
+
+		$controller    = new SourcesController( $content_analyzer, $schema_analyzer, $suggester );
+		$request       = new WP_REST_Request( 'GET', '/ai-importer/v1/sources/twitter/mapping-suggestions' );
+		$request['id'] = 'twitter';
+
+		$result = $controller->get_mapping_suggestions( $request );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertContains( 'ai_analyze_malformed', $result->get_error_codes() );
+
+		$data = $result->get_error_data();
+		$this->assertIsArray( $data );
+		$this->assertSame( 502, $data['status'] );
+		$this->assertSame( $raw_response, $data['response'] );
+	}
+
+	/**
+	 * Test malformed suggester errors carrying response data still receive a 502 status.
+	 *
+	 * @return void
+	 */
+	public function test_get_mapping_suggestions_sets_status_on_malformed_suggester_error_with_data(): void {
+		$manifest = $this->build_manifest_with_items( 'twitter', 1 );
+		$adapter  = $this->register_mock_adapter( 'twitter', true );
+		$adapter->shouldReceive( 'fetch_manifest' )->once()->andReturn( $manifest );
+
+		$content_analyzer = Mockery::mock( ContentAnalyzer::class );
+		$content_analyzer->shouldReceive( 'analyze' )->once()->andReturn( $this->sample_analysis() );
+
+		$schema_analyzer = Mockery::mock( SiteSchemaAnalyzer::class );
+		$schema_analyzer->shouldReceive( 'get_schema' )->andReturn( $this->sample_site_schema() );
+
+		$raw_response = array( 'mappings' => 'not-an-array' );
+
+		$suggester = Mockery::mock( MappingSuggester::class );
+		$suggester->shouldReceive( 'suggest' )->once()->andReturn(
+			new WP_Error(
+				'ai_mapping_malformed',
+				'AI mapping response field "mappings" must be of type array.',
+				array( 'response' => $raw_response )
+			)
+		);
+
+		$controller    = new SourcesController( $content_analyzer, $schema_analyzer, $suggester );
+		$request       = new WP_REST_Request( 'GET', '/ai-importer/v1/sources/twitter/mapping-suggestions' );
+		$request['id'] = 'twitter';
+
+		$result = $controller->get_mapping_suggestions( $request );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertContains( 'ai_mapping_malformed', $result->get_error_codes() );
+
+		$data = $result->get_error_data();
+		$this->assertIsArray( $data );
+		$this->assertSame( 502, $data['status'] );
+		$this->assertSame( $raw_response, $data['response'] );
+	}
+
+	/**
+	 * Test get_mapping_suggestions surfaces manifest fetch failures.
+	 *
+	 * @return void
+	 */
+	public function test_get_mapping_suggestions_manifest_failure(): void {
+		$adapter = $this->register_mock_adapter( 'twitter', true );
+		$adapter->shouldReceive( 'fetch_manifest' )->once()->andThrow(
+			new \RuntimeException( 'Archive unreadable.' )
+		);
+
+		$request       = new WP_REST_Request( 'GET', '/ai-importer/v1/sources/twitter/mapping-suggestions' );
+		$request['id'] = 'twitter';
+
+		$result = $this->controller->get_mapping_suggestions( $request );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertContains( 'manifest_error', $result->get_error_codes() );
+		$this->assertSame( 500, $result->get_error_data()['status'] );
+	}
+
+	/**
+	 * Build a manifest containing $count items.
+	 *
+	 * @param string $source_id Adapter source ID.
+	 * @param int    $count     Number of items to create.
+	 * @return ContentManifest
+	 */
+	private function build_manifest_with_items( string $source_id, int $count ): ContentManifest {
+		$manifest = new ContentManifest( $source_id );
+
+		for ( $i = 0; $i < $count; $i++ ) {
+			$manifest->add_item(
+				new ManifestItem(
+					id: (string) $i,
+					type: ContentType::POST,
+					title: "Item {$i}",
+					created_at: new DateTimeImmutable( '2024-01-15' ),
+				)
+			);
+		}
+
+		return $manifest;
+	}
+
+	/**
+	 * Sample ContentAnalyzer analysis output.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private function sample_analysis(): array {
+		return array(
+			'content_types'        => array( 'quick_thoughts' => 3 ),
+			'top_topics'           => array( 'wordpress' ),
+			'writing_style'        => 'casual',
+			'suggested_categories' => array( 'Notes' ),
+			'high_value_content'   => array(),
+		);
+	}
+
+	/**
+	 * Sample SiteSchemaAnalyzer output.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private function sample_site_schema(): array {
+		return array(
+			'post_types' => array(
+				array(
+					'slug'   => 'post',
+					'name'   => 'Posts',
+					'public' => true,
+				),
+			),
+			'taxonomies' => array(
+				array(
+					'slug'       => 'category',
+					'name'       => 'Categories',
+					'post_types' => array( 'post' ),
+				),
+			),
+		);
+	}
+
+	/**
+	 * Sample MappingSuggester output.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private function sample_suggestions(): array {
+		return array(
+			'post_type_mappings'      => array(
+				array(
+					'source_content_type'   => 'quick_thoughts',
+					'destination_post_type' => 'post',
+					'reasoning'             => 'Short content fits Posts.',
+				),
+			),
+			'taxonomy_mappings'       => array(),
+			'content_transformations' => array(),
+			'summary'                 => 'Map quick thoughts to standard posts.',
+		);
 	}
 
 	/**
