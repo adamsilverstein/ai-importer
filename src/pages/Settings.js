@@ -14,6 +14,7 @@ import {
 	CardHeader,
 	ExternalLink,
 } from '@wordpress/components';
+import ScheduledImports from '../components/ScheduledImports';
 
 /**
  * Settings page component.
@@ -52,6 +53,8 @@ export default function Settings() {
 					</p>
 				</CardBody>
 			</Card>
+
+			<ScheduledImports />
 		</div>
 	);
 }
