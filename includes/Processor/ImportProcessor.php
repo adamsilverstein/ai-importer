@@ -199,6 +199,9 @@ class ImportProcessor {
 		$processed  = 0;
 		$offset     = (int) $batch['processed'] + (int) $batch['failed'] + (int) $batch['skipped'];
 
+		// Optional mapping configuration attached when the batch was created.
+		$mapping = isset( $batch['mapping'] ) && is_array( $batch['mapping'] ) ? $batch['mapping'] : array();
+
 		while ( $processed < self::CHUNK_SIZE && ( time() - $start_time ) < self::TIME_LIMIT ) {
 			$index = $offset + $processed;
 
@@ -251,8 +254,8 @@ class ImportProcessor {
 						// does not delete content from earlier imports.
 						$this->creator->update( $existing_id, $normalized, $batch_id );
 					} else {
-						// Create the WordPress post.
-						$post_id                 = $this->creator->create( $normalized, $batch_id );
+						// Create the WordPress post, applying any mapping config.
+						$post_id                 = $this->creator->create( $normalized, $batch_id, $mapping );
 						$batch['imported_ids'][] = $post_id;
 					}
 
