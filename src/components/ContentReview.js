@@ -3,7 +3,7 @@
  */
 
 import { useState, useMemo } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import {
 	Button,
 	Card,
@@ -11,7 +11,15 @@ import {
 	CardHeader,
 	CheckboxControl,
 	SelectControl,
+	TextControl,
 } from '@wordpress/components';
+
+import {
+	computeHighEngagementThreshold,
+	filterManifestItems,
+	getEngagementCount,
+	hasEngagementData,
+} from '../utils/manifestFilters';
 
 /**
  * ContentReview component displays manifest items for selection.
@@ -31,13 +39,38 @@ export default function ContentReview( { manifest, onImport, isLoading } ) {
 			.map( ( item ) => item.id )
 	);
 	const [ typeFilter, setTypeFilter ] = useState( '' );
+	const [ dateFromFilter, setDateFromFilter ] = useState( '' );
+	const [ dateToFilter, setDateToFilter ] = useState( '' );
+	const [ engagementFilter, setEngagementFilter ] = useState( '' );
 
-	const filteredItems = useMemo( () => {
-		if ( ! typeFilter ) {
-			return manifest.items;
-		}
-		return manifest.items.filter( ( item ) => item.type === typeFilter );
-	}, [ manifest.items, typeFilter ] );
+	const showEngagementFilter = useMemo(
+		() => hasEngagementData( manifest.items ),
+		[ manifest.items ]
+	);
+
+	const highEngagementThreshold = useMemo(
+		() => computeHighEngagementThreshold( manifest.items ),
+		[ manifest.items ]
+	);
+
+	const filteredItems = useMemo(
+		() =>
+			filterManifestItems( manifest.items, {
+				type: typeFilter,
+				dateFrom: dateFromFilter,
+				dateTo: dateToFilter,
+				engagement: engagementFilter,
+				highEngagementThreshold,
+			} ),
+		[
+			manifest.items,
+			typeFilter,
+			dateFromFilter,
+			dateToFilter,
+			engagementFilter,
+			highEngagementThreshold,
+		]
+	);
 
 	const typeOptions = useMemo( () => {
 		const types = [
@@ -51,6 +84,24 @@ export default function ContentReview( { manifest, onImport, isLoading } ) {
 			} ) ),
 		];
 	}, [ manifest.items ] );
+
+	const engagementOptions = useMemo(
+		() => [
+			{ label: __( 'All engagement', 'ai-importer' ), value: '' },
+			{ label: __( 'Any engagement', 'ai-importer' ), value: 'any' },
+			{
+				label: highEngagementThreshold
+					? sprintf(
+							/* translators: %d: engagement count threshold. */
+							__( 'High engagement (%d+)', 'ai-importer' ),
+							highEngagementThreshold
+					  )
+					: __( 'High engagement', 'ai-importer' ),
+				value: 'high',
+			},
+		],
+		[ highEngagementThreshold ]
+	);
 
 	const mediaCount = useMemo(
 		() =>
@@ -168,12 +219,40 @@ export default function ContentReview( { manifest, onImport, isLoading } ) {
 								{ __( 'selected', 'ai-importer' ) })
 							</span>
 						</h2>
-						<SelectControl
-							value={ typeFilter }
-							options={ typeOptions }
-							onChange={ setTypeFilter }
-							__nextHasNoMarginBottom
-						/>
+						<div className="ai-importer-content-review__filters">
+							<SelectControl
+								label={ __( 'Type', 'ai-importer' ) }
+								value={ typeFilter }
+								options={ typeOptions }
+								onChange={ setTypeFilter }
+								__nextHasNoMarginBottom
+							/>
+							<TextControl
+								label={ __( 'From date', 'ai-importer' ) }
+								type="date"
+								value={ dateFromFilter }
+								onChange={ setDateFromFilter }
+								max={ dateToFilter || undefined }
+								__nextHasNoMarginBottom
+							/>
+							<TextControl
+								label={ __( 'To date', 'ai-importer' ) }
+								type="date"
+								value={ dateToFilter }
+								onChange={ setDateToFilter }
+								min={ dateFromFilter || undefined }
+								__nextHasNoMarginBottom
+							/>
+							{ showEngagementFilter && (
+								<SelectControl
+									label={ __( 'Engagement', 'ai-importer' ) }
+									value={ engagementFilter }
+									options={ engagementOptions }
+									onChange={ setEngagementFilter }
+									__nextHasNoMarginBottom
+								/>
+							) }
+						</div>
 					</div>
 				</CardHeader>
 				<CardBody>
@@ -219,10 +298,27 @@ export default function ContentReview( { manifest, onImport, isLoading } ) {
 												{ __( 'media', 'ai-importer' ) }
 											</span>
 										) }
+										{ getEngagementCount( item ) > 0 && (
+											<span className="ai-importer-content-review__item-engagement">
+												{ getEngagementCount( item ) }{ ' ' }
+												{ __(
+													'engagement',
+													'ai-importer'
+												) }
+											</span>
+										) }
 									</span>
 								</div>
 							</div>
 						) ) }
+						{ filteredItems.length === 0 && (
+							<p className="ai-importer-content-review__empty">
+								{ __(
+									'No items match the current filters.',
+									'ai-importer'
+								) }
+							</p>
+						) }
 						{ filteredItems.length > 100 && (
 							<p className="ai-importer-content-review__truncated">
 								{ __(
