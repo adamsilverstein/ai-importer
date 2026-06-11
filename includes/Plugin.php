@@ -15,6 +15,7 @@ use AI_Importer\Adapters\MediumAdapter;
 use AI_Importer\Adapters\SubstackAdapter;
 use AI_Importer\Adapters\TumblrAdapter;
 use AI_Importer\Adapters\TwitterAdapter;
+use AI_Importer\Adapters\YouTubeAdapter;
 use AI_Importer\AI\AIService;
 use AI_Importer\AI\AltTextGenerator;
 use AI_Importer\AI\HashtagMapper;
@@ -89,6 +90,7 @@ class Plugin {
 		$this->adapter_registry->register( new TumblrAdapter() );
 		$this->adapter_registry->register( new SubstackAdapter() );
 		$this->adapter_registry->register( new GhostAdapter() );
+		$this->adapter_registry->register( new YouTubeAdapter() );
 
 		/**
 		 * Fires when adapters should be registered.
