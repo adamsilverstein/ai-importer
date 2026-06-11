@@ -10,6 +10,7 @@ namespace AI_Importer\Processor;
 use AI_Importer\Adapters\AdapterRegistry;
 use AI_Importer\Normalizer\ContentNormalizer;
 use AI_Importer\Normalizer\BloggerNormalizer;
+use AI_Importer\Normalizer\GhostNormalizer;
 use AI_Importer\Normalizer\InstagramNormalizer;
 use AI_Importer\Normalizer\MediumNormalizer;
 use AI_Importer\Normalizer\SubstackNormalizer;
@@ -328,6 +329,7 @@ class ImportProcessor {
 				'blogger'   => new BloggerNormalizer(),
 				'tumblr'    => new TumblrNormalizer(),
 				'substack'  => new SubstackNormalizer(),
+				'ghost'     => new GhostNormalizer(),
 			);
 
 			/**
