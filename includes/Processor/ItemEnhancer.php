@@ -7,7 +7,9 @@
 
 namespace AI_Importer\Processor;
 
+use AI_Importer\AI\ContentExpander;
 use AI_Importer\AI\HashtagMapper;
+use AI_Importer\AI\InternalLinkSuggester;
 use AI_Importer\AI\MetaDescriptionGenerator;
 use AI_Importer\AI\TitleGenerator;
 use AI_Importer\Normalizer\NormalizedItem;
@@ -16,9 +18,10 @@ use AI_Importer\Normalizer\NormalizedItem;
  * Applies enhancements to a NormalizedItem before it becomes a WordPress post.
  *
  * Local cleanup (ContentCleaner) runs first so AI calls operate on already-
- * sanitized text. Then optional AI enhancements run: title generation, SEO
- * meta description, and hashtag-to-tag mapping. Enhancement failures are
- * non-fatal — they are logged when WP_DEBUG is on but never stop the import.
+ * sanitized text. Then optional AI enhancements run: content expansion, title
+ * generation, SEO meta description, internal linking, and hashtag-to-tag
+ * mapping. Enhancement failures are non-fatal — they are logged when WP_DEBUG
+ * is on but never stop the import.
  *
  * Alt text and thread stitching are handled elsewhere in the pipeline because
  * they operate on media or pre-normalization input.
@@ -59,45 +62,70 @@ class ItemEnhancer {
 	private ?HashtagMapper $hashtag_mapper;
 
 	/**
+	 * Optional content expander (F8.3).
+	 *
+	 * @var ContentExpander|null
+	 */
+	private ?ContentExpander $content_expander;
+
+	/**
+	 * Optional internal link suggester (F8.4).
+	 *
+	 * @var InternalLinkSuggester|null
+	 */
+	private ?InternalLinkSuggester $internal_link_suggester;
+
+	/**
 	 * Enhancement flags.
 	 *
-	 * @var array{title: bool, meta_description: bool, content_cleanup: bool, hashtag_mapping: bool}
+	 * @var array{title: bool, meta_description: bool, content_cleanup: bool, hashtag_mapping: bool, content_expansion: bool, internal_linking: bool}
 	 */
 	private array $flags;
 
 	/**
 	 * Constructor.
 	 *
-	 * @param TitleGenerator           $title_generator Title generator.
-	 * @param MetaDescriptionGenerator $meta_generator  Meta description generator.
-	 * @param ContentCleaner|null      $content_cleaner Optional content cleaner.
-	 * @param HashtagMapper|null       $hashtag_mapper  Optional hashtag mapper.
-	 * @param array<string, bool>      $flags           Per-enhancement flags: 'title', 'meta_description', 'content_cleanup', 'hashtag_mapping'.
+	 * @param TitleGenerator             $title_generator         Title generator.
+	 * @param MetaDescriptionGenerator   $meta_generator          Meta description generator.
+	 * @param ContentCleaner|null        $content_cleaner         Optional content cleaner.
+	 * @param HashtagMapper|null         $hashtag_mapper          Optional hashtag mapper.
+	 * @param array<string, bool>        $flags                   Per-enhancement flags: 'title', 'meta_description', 'content_cleanup', 'hashtag_mapping', 'content_expansion', 'internal_linking'.
+	 * @param ContentExpander|null       $content_expander        Optional content expander (F8.3).
+	 * @param InternalLinkSuggester|null $internal_link_suggester Optional internal link suggester (F8.4).
 	 */
 	public function __construct(
 		TitleGenerator $title_generator,
 		MetaDescriptionGenerator $meta_generator,
 		?ContentCleaner $content_cleaner = null,
 		?HashtagMapper $hashtag_mapper = null,
-		array $flags = array()
+		array $flags = array(),
+		?ContentExpander $content_expander = null,
+		?InternalLinkSuggester $internal_link_suggester = null
 	) {
-		$this->title_generator = $title_generator;
-		$this->meta_generator  = $meta_generator;
-		$this->content_cleaner = $content_cleaner;
-		$this->hashtag_mapper  = $hashtag_mapper;
-		$this->flags           = array(
-			'title'            => (bool) ( $flags['title'] ?? true ),
-			'meta_description' => (bool) ( $flags['meta_description'] ?? true ),
-			'content_cleanup'  => (bool) ( $flags['content_cleanup'] ?? true ),
-			'hashtag_mapping'  => (bool) ( $flags['hashtag_mapping'] ?? true ),
+		$this->title_generator         = $title_generator;
+		$this->meta_generator          = $meta_generator;
+		$this->content_cleaner         = $content_cleaner;
+		$this->hashtag_mapper          = $hashtag_mapper;
+		$this->content_expander        = $content_expander;
+		$this->internal_link_suggester = $internal_link_suggester;
+		$this->flags                   = array(
+			'title'             => (bool) ( $flags['title'] ?? true ),
+			'meta_description'  => (bool) ( $flags['meta_description'] ?? true ),
+			'content_cleanup'   => (bool) ( $flags['content_cleanup'] ?? true ),
+			'hashtag_mapping'   => (bool) ( $flags['hashtag_mapping'] ?? true ),
+			'content_expansion' => (bool) ( $flags['content_expansion'] ?? false ),
+			'internal_linking'  => (bool) ( $flags['internal_linking'] ?? false ),
 		);
 	}
 
 	/**
 	 * Apply enabled enhancements to the item in place.
 	 *
-	 * Order: local cleanup → title → meta description → hashtag mapping.
-	 * Cleanup runs first so AI calls see sanitized text.
+	 * Order: local cleanup → content expansion → title → meta description →
+	 * hashtag mapping → internal linking. Cleanup runs first so AI calls see
+	 * sanitized text; expansion runs before title and meta so those summarize
+	 * the fuller article; internal linking runs last so it links the final
+	 * content.
 	 *
 	 * @param NormalizedItem $item Item to enhance (mutated).
 	 * @return void
@@ -105,6 +133,10 @@ class ItemEnhancer {
 	public function enhance( NormalizedItem $item ): void {
 		if ( $this->flags['content_cleanup'] && null !== $this->content_cleaner ) {
 			$item->content = $this->content_cleaner->clean( $item->content );
+		}
+
+		if ( $this->flags['content_expansion'] && null !== $this->content_expander ) {
+			$this->enhance_content_expansion( $item );
 		}
 
 		if ( $this->flags['title'] ) {
@@ -118,6 +150,50 @@ class ItemEnhancer {
 		if ( $this->flags['hashtag_mapping'] && null !== $this->hashtag_mapper ) {
 			$this->enhance_tags( $item );
 		}
+
+		if ( $this->flags['internal_linking'] && null !== $this->internal_link_suggester ) {
+			$this->enhance_internal_links( $item );
+		}
+	}
+
+	/**
+	 * Expand short content into a fuller article (F8.3).
+	 *
+	 * The expander is non-destructive: it returns the original content when the
+	 * post is already long enough, when AI is unavailable, or on any error, so
+	 * this simply replaces the content with whatever it returns.
+	 *
+	 * @param NormalizedItem $item Item (mutated).
+	 * @return void
+	 */
+	private function enhance_content_expansion( NormalizedItem $item ): void {
+		if ( null === $this->content_expander || '' === trim( $item->content ) ) {
+			return;
+		}
+
+		$options = array();
+		if ( null !== $item->title && '' !== trim( $item->title ) ) {
+			$options['title'] = $item->title;
+		}
+
+		$item->content = $this->content_expander->expand( $item->content, $options );
+	}
+
+	/**
+	 * Suggest and apply internal links to existing site content (F8.4).
+	 *
+	 * The suggester is non-destructive: it returns the original content when AI
+	 * is unavailable, when there are no candidate posts, or on any error.
+	 *
+	 * @param NormalizedItem $item Item (mutated).
+	 * @return void
+	 */
+	private function enhance_internal_links( NormalizedItem $item ): void {
+		if ( null === $this->internal_link_suggester || '' === trim( $item->content ) ) {
+			return;
+		}
+
+		$item->content = $this->internal_link_suggester->enhance( $item->content );
 	}
 
 	/**

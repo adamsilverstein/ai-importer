@@ -18,7 +18,9 @@ use AI_Importer\Adapters\TwitterAdapter;
 use AI_Importer\Adapters\YouTubeAdapter;
 use AI_Importer\AI\AIService;
 use AI_Importer\AI\AltTextGenerator;
+use AI_Importer\AI\ContentExpander;
 use AI_Importer\AI\HashtagMapper;
+use AI_Importer\AI\InternalLinkSuggester;
 use AI_Importer\AI\MetaDescriptionGenerator;
 use AI_Importer\AI\TitleGenerator;
 use AI_Importer\Processor\ContentCleaner;
@@ -162,9 +164,15 @@ class Plugin {
 	/**
 	 * Construct the item enhancer.
 	 *
-	 * AI-backed enhancements (title, meta description, hashtag mapping) are
-	 * only attached when a WP AI client is configured. The local
-	 * ContentCleaner runs regardless of AI availability.
+	 * AI-backed enhancements (title, meta description, hashtag mapping,
+	 * content expansion, internal linking) are only attached when a WP AI
+	 * client is configured. The local ContentCleaner runs regardless of AI
+	 * availability.
+	 *
+	 * Content expansion (F8.3) and internal linking (F8.4) are opt-in: their
+	 * services are wired up when AI is available, but their flags default to
+	 * off. Site owners enable them via the 'ai_importer_enhancement_flags'
+	 * filter (or by replacing the enhancer through 'ai_importer_item_enhancer').
 	 *
 	 * Returns null when no WP AI client is configured AND no local cleanup
 	 * would happen — currently the cleaner always runs, so this returns a
@@ -186,17 +194,44 @@ class Plugin {
 				$content_cleaner,
 				null,
 				array(
-					'title'            => false,
-					'meta_description' => false,
-					'hashtag_mapping'  => false,
+					'title'             => false,
+					'meta_description'  => false,
+					'hashtag_mapping'   => false,
+					'content_expansion' => false,
+					'internal_linking'  => false,
 				)
 			);
 		} else {
+			/**
+			 * Filters which AI enhancements are enabled by default.
+			 *
+			 * Content expansion (F8.3) and internal linking (F8.4) are opt-in
+			 * and default to off because they alter post bodies and incur
+			 * additional AI cost (expansion: 1 call/item; internal links:
+			 * 1 call/item, batchable). Title, meta description, and hashtag
+			 * mapping default to on.
+			 *
+			 * @param array<string, bool> $flags Enhancement flags keyed by enhancement name.
+			 */
+			$flags = apply_filters(
+				'ai_importer_enhancement_flags',
+				array(
+					'title'             => true,
+					'meta_description'  => true,
+					'hashtag_mapping'   => true,
+					'content_expansion' => false,
+					'internal_linking'  => false,
+				)
+			);
+
 			$enhancer = new ItemEnhancer(
 				new TitleGenerator( $service ),
 				new MetaDescriptionGenerator( $service ),
 				$content_cleaner,
-				new HashtagMapper( $service )
+				new HashtagMapper( $service ),
+				(array) $flags,
+				new ContentExpander( $service ),
+				new InternalLinkSuggester( $service )
 			);
 		}
 
