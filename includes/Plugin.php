@@ -15,16 +15,21 @@ use AI_Importer\Adapters\MediumAdapter;
 use AI_Importer\Adapters\SubstackAdapter;
 use AI_Importer\Adapters\TumblrAdapter;
 use AI_Importer\Adapters\TwitterAdapter;
+use AI_Importer\Adapters\YouTubeAdapter;
 use AI_Importer\AI\AIService;
 use AI_Importer\AI\AltTextGenerator;
+use AI_Importer\AI\ContentExpander;
 use AI_Importer\AI\HashtagMapper;
+use AI_Importer\AI\InternalLinkSuggester;
 use AI_Importer\AI\MetaDescriptionGenerator;
 use AI_Importer\AI\TitleGenerator;
 use AI_Importer\Processor\ContentCleaner;
 use AI_Importer\Processor\ImportProcessor;
+use AI_Importer\Processor\ImportScheduler;
 use AI_Importer\Processor\ItemEnhancer;
 use AI_Importer\Processor\MediaHandler;
 use AI_Importer\REST\ImportsController;
+use AI_Importer\REST\SchedulesController;
 use AI_Importer\REST\SourcesController;
 use AI_Importer\Schema\CustomTaxonomyRegistrar;
 
@@ -90,6 +95,7 @@ class Plugin {
 		$this->adapter_registry->register( new TumblrAdapter() );
 		$this->adapter_registry->register( new SubstackAdapter() );
 		$this->adapter_registry->register( new GhostAdapter() );
+		$this->adapter_registry->register( new YouTubeAdapter() );
 
 		/**
 		 * Fires when adapters should be registered.
@@ -106,6 +112,11 @@ class Plugin {
 		$media_handler = $this->build_media_handler( $ai_service );
 		$processor     = new ImportProcessor( null, $media_handler, $this->build_item_enhancer( $ai_service ) );
 		$processor->init();
+
+		// Initialize scheduled imports (F10.3). Registers the recurring
+		// Action Scheduler hook so scheduled runs fire on all requests.
+		$scheduler = new ImportScheduler();
+		$scheduler->init();
 
 		// Initialize admin.
 		if ( is_admin() ) {
@@ -133,6 +144,9 @@ class Plugin {
 
 		$imports_controller = new ImportsController();
 		$imports_controller->register_routes();
+
+		$schedules_controller = new SchedulesController();
+		$schedules_controller->register_routes();
 	}
 
 	/**
@@ -156,9 +170,15 @@ class Plugin {
 	/**
 	 * Construct the item enhancer.
 	 *
-	 * AI-backed enhancements (title, meta description, hashtag mapping) are
-	 * only attached when a WP AI client is configured. The local
-	 * ContentCleaner runs regardless of AI availability.
+	 * AI-backed enhancements (title, meta description, hashtag mapping,
+	 * content expansion, internal linking) are only attached when a WP AI
+	 * client is configured. The local ContentCleaner runs regardless of AI
+	 * availability.
+	 *
+	 * Content expansion (F8.3) and internal linking (F8.4) are opt-in: their
+	 * services are wired up when AI is available, but their flags default to
+	 * off. Site owners enable them via the 'ai_importer_enhancement_flags'
+	 * filter (or by replacing the enhancer through 'ai_importer_item_enhancer').
 	 *
 	 * Returns null when no WP AI client is configured AND no local cleanup
 	 * would happen — currently the cleaner always runs, so this returns a
@@ -180,17 +200,44 @@ class Plugin {
 				$content_cleaner,
 				null,
 				array(
-					'title'            => false,
-					'meta_description' => false,
-					'hashtag_mapping'  => false,
+					'title'             => false,
+					'meta_description'  => false,
+					'hashtag_mapping'   => false,
+					'content_expansion' => false,
+					'internal_linking'  => false,
 				)
 			);
 		} else {
+			/**
+			 * Filters which AI enhancements are enabled by default.
+			 *
+			 * Content expansion (F8.3) and internal linking (F8.4) are opt-in
+			 * and default to off because they alter post bodies and incur
+			 * additional AI cost (expansion: 1 call/item; internal links:
+			 * 1 call/item, batchable). Title, meta description, and hashtag
+			 * mapping default to on.
+			 *
+			 * @param array<string, bool> $flags Enhancement flags keyed by enhancement name.
+			 */
+			$flags = apply_filters(
+				'ai_importer_enhancement_flags',
+				array(
+					'title'             => true,
+					'meta_description'  => true,
+					'hashtag_mapping'   => true,
+					'content_expansion' => false,
+					'internal_linking'  => false,
+				)
+			);
+
 			$enhancer = new ItemEnhancer(
 				new TitleGenerator( $service ),
 				new MetaDescriptionGenerator( $service ),
 				$content_cleaner,
-				new HashtagMapper( $service )
+				new HashtagMapper( $service ),
+				(array) $flags,
+				new ContentExpander( $service ),
+				new InternalLinkSuggester( $service )
 			);
 		}
 

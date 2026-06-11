@@ -7,7 +7,9 @@
 
 namespace AI_Importer\Tests\Unit\Processor;
 
+use AI_Importer\AI\ContentExpander;
 use AI_Importer\AI\HashtagMapper;
+use AI_Importer\AI\InternalLinkSuggester;
 use AI_Importer\AI\MetaDescriptionGenerator;
 use AI_Importer\AI\TitleGenerator;
 use AI_Importer\Adapters\Manifest\ContentType;
@@ -458,5 +460,115 @@ class ItemEnhancerTest extends TestCase {
 		$enhancer->enhance( $item );
 
 		$this->assertSame( array( 'WordPress7' ), $item->tags );
+	}
+
+	/**
+	 * Build a pair of skip-only title/meta mocks for content-pipeline tests.
+	 *
+	 * @return array{0: TitleGenerator, 1: MetaDescriptionGenerator}
+	 */
+	private function make_skip_generators(): array {
+		$title_gen = $this->createMock( TitleGenerator::class );
+		$title_gen->method( 'generate' )->willReturn( new WP_Error( 'skip', 'skip' ) );
+
+		$meta_gen = $this->createMock( MetaDescriptionGenerator::class );
+		$meta_gen->method( 'generate' )->willReturn( new WP_Error( 'skip', 'skip' ) );
+
+		return array( $title_gen, $meta_gen );
+	}
+
+	/**
+	 * Test the content_expansion flag (off by default) gates the expander.
+	 *
+	 * @return void
+	 */
+	public function test_content_expansion_disabled_by_default(): void {
+		list( $title_gen, $meta_gen ) = $this->make_skip_generators();
+
+		$expander = $this->createMock( ContentExpander::class );
+		$expander->expects( $this->never() )->method( 'expand' );
+
+		$enhancer = new ItemEnhancer( $title_gen, $meta_gen, null, null, array(), $expander );
+		$item     = $this->make_item( 'Title', 'Short body.' );
+
+		$enhancer->enhance( $item );
+
+		$this->assertSame( 'Short body.', $item->content );
+	}
+
+	/**
+	 * Test enabling content_expansion runs the expander and replaces content.
+	 *
+	 * @return void
+	 */
+	public function test_content_expansion_runs_when_enabled(): void {
+		list( $title_gen, $meta_gen ) = $this->make_skip_generators();
+
+		$expander = $this->createMock( ContentExpander::class );
+		$expander->expects( $this->once() )
+			->method( 'expand' )
+			->willReturn( '<p>Expanded body.</p>' );
+
+		$enhancer = new ItemEnhancer(
+			$title_gen,
+			$meta_gen,
+			null,
+			null,
+			array( 'content_expansion' => true ),
+			$expander
+		);
+		$item = $this->make_item( 'Title', 'Short body.' );
+
+		$enhancer->enhance( $item );
+
+		$this->assertSame( '<p>Expanded body.</p>', $item->content );
+	}
+
+	/**
+	 * Test the internal_linking flag (off by default) gates the suggester.
+	 *
+	 * @return void
+	 */
+	public function test_internal_linking_disabled_by_default(): void {
+		list( $title_gen, $meta_gen ) = $this->make_skip_generators();
+
+		$suggester = $this->createMock( InternalLinkSuggester::class );
+		$suggester->expects( $this->never() )->method( 'enhance' );
+
+		$enhancer = new ItemEnhancer( $title_gen, $meta_gen, null, null, array(), null, $suggester );
+		$item     = $this->make_item( 'Title', 'Body content.' );
+
+		$enhancer->enhance( $item );
+
+		$this->assertSame( 'Body content.', $item->content );
+	}
+
+	/**
+	 * Test enabling internal_linking runs the suggester and replaces content.
+	 *
+	 * @return void
+	 */
+	public function test_internal_linking_runs_when_enabled(): void {
+		list( $title_gen, $meta_gen ) = $this->make_skip_generators();
+
+		$suggester = $this->createMock( InternalLinkSuggester::class );
+		$suggester->expects( $this->once() )
+			->method( 'enhance' )
+			->willReturn( '<p>Body with <a href="https://example.com/x">links</a>.</p>' );
+
+		$enhancer = new ItemEnhancer(
+			$title_gen,
+			$meta_gen,
+			null,
+			null,
+			array( 'internal_linking' => true ),
+			null,
+			$suggester
+		);
+		$item = $this->make_item( 'Title', 'Body content.' );
+
+		$enhancer->enhance( $item );
+
+		$this->assertSame( '<p>Body with <a href="https://example.com/x">links</a>.</p>', $item->content );
 	}
 }

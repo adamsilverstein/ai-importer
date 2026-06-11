@@ -16,6 +16,7 @@ use AI_Importer\Normalizer\MediumNormalizer;
 use AI_Importer\Normalizer\SubstackNormalizer;
 use AI_Importer\Normalizer\TumblrNormalizer;
 use AI_Importer\Normalizer\TwitterNormalizer;
+use AI_Importer\Normalizer\YouTubeNormalizer;
 
 /**
  * Orchestrates the import pipeline using Action Scheduler for
@@ -330,6 +331,7 @@ class ImportProcessor {
 				'tumblr'    => new TumblrNormalizer(),
 				'substack'  => new SubstackNormalizer(),
 				'ghost'     => new GhostNormalizer(),
+				'youtube'   => new YouTubeNormalizer(),
 			);
 
 			/**
