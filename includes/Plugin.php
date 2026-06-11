@@ -9,6 +9,7 @@ namespace AI_Importer;
 
 use AI_Importer\Adapters\AdapterRegistry;
 use AI_Importer\Adapters\BloggerAdapter;
+use AI_Importer\Adapters\GhostAdapter;
 use AI_Importer\Adapters\InstagramAdapter;
 use AI_Importer\Adapters\MediumAdapter;
 use AI_Importer\Adapters\TumblrAdapter;
@@ -85,6 +86,7 @@ class Plugin {
 		$this->adapter_registry->register( new InstagramAdapter() );
 		$this->adapter_registry->register( new BloggerAdapter() );
 		$this->adapter_registry->register( new TumblrAdapter() );
+		$this->adapter_registry->register( new GhostAdapter() );
 
 		/**
 		 * Fires when adapters should be registered.
