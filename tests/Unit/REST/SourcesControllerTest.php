@@ -531,6 +531,170 @@ class SourcesControllerTest extends TestCase {
 	}
 
 	/**
+	 * Test get_mapping returns null when no mapping is saved.
+	 *
+	 * @return void
+	 */
+	public function test_get_mapping_returns_null_when_none_saved(): void {
+		$this->register_mock_adapter( 'twitter' );
+
+		Functions\when( 'get_option' )->justReturn( null );
+
+		$request       = new WP_REST_Request( 'GET', '/ai-importer/v1/sources/twitter/mappings' );
+		$request['id'] = 'twitter';
+
+		$response = $this->controller->get_mapping( $request );
+		$result   = $response->get_data();
+
+		$this->assertSame( 'twitter', $result['source_id'] );
+		$this->assertNull( $result['mapping'] );
+	}
+
+	/**
+	 * Test get_mapping returns the saved mapping from the expected option.
+	 *
+	 * @return void
+	 */
+	public function test_get_mapping_returns_saved_mapping(): void {
+		$this->register_mock_adapter( 'twitter' );
+
+		$mapping = array(
+			'post_type'   => 'page',
+			'post_status' => 'publish',
+		);
+
+		Functions\when( 'get_option' )->alias(
+			function ( $key, $default = false ) use ( $mapping ) {
+				return 'ai_importer_mappings_twitter' === $key ? $mapping : $default;
+			}
+		);
+
+		$request       = new WP_REST_Request( 'GET', '/ai-importer/v1/sources/twitter/mappings' );
+		$request['id'] = 'twitter';
+
+		$response = $this->controller->get_mapping( $request );
+		$result   = $response->get_data();
+
+		$this->assertSame( $mapping, $result['mapping'] );
+	}
+
+	/**
+	 * Test get_mapping returns 404 for an unknown source.
+	 *
+	 * @return void
+	 */
+	public function test_get_mapping_source_not_found(): void {
+		$request       = new WP_REST_Request( 'GET', '/ai-importer/v1/sources/unknown/mappings' );
+		$request['id'] = 'unknown';
+
+		$result = $this->controller->get_mapping( $request );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertContains( 'source_not_found', $result->get_error_codes() );
+	}
+
+	/**
+	 * Test save_mapping persists a sanitized mapping in the adapter option.
+	 *
+	 * @return void
+	 */
+	public function test_save_mapping_persists_sanitized_mapping(): void {
+		$this->register_mock_adapter( 'twitter' );
+		$this->stub_sanitizers();
+
+		$saved = array();
+
+		Functions\when( 'update_option' )->alias(
+			function ( $key, $value, $autoload = null ) use ( &$saved ) {
+				$saved[ $key ] = $value;
+				return true;
+			}
+		);
+
+		$request       = new WP_REST_Request( 'POST', '/ai-importer/v1/sources/twitter/mappings' );
+		$request['id'] = 'twitter';
+		$request->set_body_params(
+			array(
+				'mapping' => array(
+					'post_type'     => 'page',
+					'post_status'   => 'publish',
+					'unknown_field' => 'evil',
+				),
+			)
+		);
+
+		$response = $this->controller->save_mapping( $request );
+		$result   = $response->get_data();
+
+		$expected = array(
+			'post_type'   => 'page',
+			'post_status' => 'publish',
+		);
+
+		$this->assertSame( $expected, $result['mapping'] );
+		$this->assertSame( $expected, $saved['ai_importer_mappings_twitter'] );
+	}
+
+	/**
+	 * Test save_mapping rejects a mapping with no valid fields.
+	 *
+	 * @return void
+	 */
+	public function test_save_mapping_rejects_invalid_mapping(): void {
+		$this->register_mock_adapter( 'twitter' );
+		$this->stub_sanitizers();
+
+		$request       = new WP_REST_Request( 'POST', '/ai-importer/v1/sources/twitter/mappings' );
+		$request['id'] = 'twitter';
+		$request->set_body_params(
+			array(
+				'mapping' => array( 'post_status' => 'trash' ),
+			)
+		);
+
+		$result = $this->controller->save_mapping( $request );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertContains( 'invalid_mapping', $result->get_error_codes() );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+	}
+
+	/**
+	 * Test save_mapping rejects a missing mapping parameter.
+	 *
+	 * @return void
+	 */
+	public function test_save_mapping_requires_mapping(): void {
+		$this->register_mock_adapter( 'twitter' );
+
+		$request       = new WP_REST_Request( 'POST', '/ai-importer/v1/sources/twitter/mappings' );
+		$request['id'] = 'twitter';
+
+		$result = $this->controller->save_mapping( $request );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertContains( 'invalid_mapping', $result->get_error_codes() );
+	}
+
+	/**
+	 * Stub sanitization functions used by MappingConfig::sanitize().
+	 *
+	 * @return void
+	 */
+	private function stub_sanitizers(): void {
+		Functions\when( 'sanitize_key' )->alias(
+			function ( $key ) {
+				return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $key ) );
+			}
+		);
+		Functions\when( 'sanitize_text_field' )->alias(
+			function ( $value ) {
+				return trim( (string) $value );
+			}
+		);
+	}
+
+	/**
 	 * Test permissions check denies unauthorized users.
 	 *
 	 * @return void

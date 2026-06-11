@@ -11,6 +11,7 @@ use AI_Importer\Adapters\AdapterRegistry;
 use AI_Importer\AI\AIService;
 use AI_Importer\AI\ContentAnalyzer;
 use AI_Importer\AI\MappingSuggester;
+use AI_Importer\Schema\MappingConfig;
 use AI_Importer\Schema\SiteSchemaAnalyzer;
 use WP_Error;
 use WP_REST_Controller;
@@ -28,6 +29,8 @@ use WP_REST_Server;
  *   POST   /sources/{id}/disconnect              - Disconnect an adapter
  *   GET    /sources/{id}/manifest                - Fetch content manifest
  *   GET    /sources/{id}/mapping-suggestions     - Generate AI mapping suggestions
+ *   GET    /sources/{id}/mappings                - Get the saved mapping configuration
+ *   POST   /sources/{id}/mappings                - Save a mapping configuration
  */
 class SourcesController extends WP_REST_Controller {
 
@@ -200,6 +203,44 @@ class SourcesController extends WP_REST_Controller {
 							'minimum'           => 1,
 							'maximum'           => 50,
 							'sanitize_callback' => 'absint',
+						),
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/(?P<id>[a-zA-Z0-9_-]+)/mappings',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_mapping' ),
+					'permission_callback' => array( $this, 'manage_permissions_check' ),
+					'args'                => array(
+						'id' => array(
+							'required'          => true,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						),
+					),
+				),
+				array(
+					'methods'             => WP_REST_Server::EDITABLE,
+					'callback'            => array( $this, 'save_mapping' ),
+					'permission_callback' => array( $this, 'manage_permissions_check' ),
+					'args'                => array(
+						'id'      => array(
+							'required'          => true,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						),
+						'mapping' => array_merge(
+							array(
+								'required'    => true,
+								'description' => __( 'Mapping configuration to save for reuse.', 'ai-importer' ),
+							),
+							MappingConfig::get_schema()
 						),
 					),
 				),
@@ -463,6 +504,75 @@ class SourcesController extends WP_REST_Controller {
 				'analysis'    => $analysis,
 				'site_schema' => $site_schema,
 				'suggestions' => $suggestions,
+			)
+		);
+	}
+
+	/**
+	 * Get the saved mapping configuration for a source.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function get_mapping( $request ): WP_REST_Response|WP_Error {
+		$adapter = $this->get_adapter( $request['id'] );
+
+		if ( is_wp_error( $adapter ) ) {
+			return $adapter;
+		}
+
+		$mapping = get_option( MappingConfig::get_option_key( $adapter->get_id() ), null );
+
+		return rest_ensure_response(
+			array(
+				'source_id' => $adapter->get_id(),
+				'mapping'   => is_array( $mapping ) ? $mapping : null,
+			)
+		);
+	}
+
+	/**
+	 * Save a mapping configuration for a source.
+	 *
+	 * Stored in wp_options as ai_importer_mappings_{adapter_id} so it can
+	 * be reused across import runs (F3.5).
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function save_mapping( $request ): WP_REST_Response|WP_Error {
+		$adapter = $this->get_adapter( $request['id'] );
+
+		if ( is_wp_error( $adapter ) ) {
+			return $adapter;
+		}
+
+		$mapping = $request->get_param( 'mapping' );
+
+		if ( ! is_array( $mapping ) ) {
+			return new WP_Error(
+				'invalid_mapping',
+				__( 'A mapping configuration object is required.', 'ai-importer' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$mapping = MappingConfig::sanitize( $mapping );
+
+		if ( empty( $mapping ) ) {
+			return new WP_Error(
+				'invalid_mapping',
+				__( 'The mapping configuration contains no valid fields.', 'ai-importer' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		update_option( MappingConfig::get_option_key( $adapter->get_id() ), $mapping, false );
+
+		return rest_ensure_response(
+			array(
+				'source_id' => $adapter->get_id(),
+				'mapping'   => $mapping,
 			)
 		);
 	}
