@@ -8,6 +8,7 @@
 namespace AI_Importer\Processor;
 
 use AI_Importer\Normalizer\NormalizedItem;
+use AI_Importer\Schema\CustomTaxonomyRegistrar;
 use DateTimeZone;
 use RuntimeException;
 
@@ -48,6 +49,22 @@ class ContentCreator {
 	public const META_SEO_DESCRIPTION = '_ai_importer_seo_description';
 
 	/**
+	 * Registrar used to create custom taxonomies on demand (F9.3).
+	 *
+	 * @var CustomTaxonomyRegistrar
+	 */
+	private CustomTaxonomyRegistrar $taxonomy_registrar;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param CustomTaxonomyRegistrar|null $taxonomy_registrar Optional registrar (injectable for tests).
+	 */
+	public function __construct( ?CustomTaxonomyRegistrar $taxonomy_registrar = null ) {
+		$this->taxonomy_registrar = $taxonomy_registrar ?? new CustomTaxonomyRegistrar();
+	}
+
+	/**
 	 * Create a WordPress post from a normalized item.
 	 *
 	 * @param NormalizedItem       $item     The normalized content.
@@ -59,14 +76,24 @@ class ContentCreator {
 	public function create( NormalizedItem $item, string $batch_id, array $mapping = array() ): int {
 		$gmt_date = $item->publish_date->setTimezone( new DateTimeZone( 'UTC' ) );
 
+		$post_type = $this->resolve_post_type( $item, $mapping );
+
 		$post_args = array(
 			'post_title'    => $item->title ? $item->title : $item->generate_title(),
 			'post_content'  => $item->content,
 			'post_status'   => $this->resolve_post_status( $mapping ),
 			'post_date'     => $item->publish_date->format( 'Y-m-d H:i:s' ),
 			'post_date_gmt' => $gmt_date->format( 'Y-m-d H:i:s' ),
-			'post_type'     => $this->resolve_post_type( $item, $mapping ),
+			'post_type'     => $post_type,
 		);
+
+		// Apply author mapping (F9.2): a matching source-author mapping wins
+		// over the default_author_id, which wins over WordPress's default
+		// (current user). Only validated, existing users are applied.
+		$author_id = $this->resolve_author_id( $item, $mapping );
+		if ( null !== $author_id ) {
+			$post_args['post_author'] = $author_id;
+		}
 
 		/**
 		 * Filters the post arguments before inserting an imported item.
@@ -121,6 +148,12 @@ class ContentCreator {
 		if ( ! empty( $images ) && $images[0]->is_imported() ) {
 			set_post_thumbnail( $post_id, $images[0]->attachment_id );
 		}
+
+		// Assign a post format (F9.4) when the destination post type supports it.
+		$this->apply_post_format( $post_id, $post_type, $item, $mapping );
+
+		// Copy mapped item metadata to post meta (F9.1, generic post-meta).
+		$this->apply_meta_field_mappings( $post_id, $item, $mapping );
 
 		/**
 		 * Fires after a post is created from an imported item.
@@ -189,6 +222,9 @@ class ContentCreator {
 	 * the destination taxonomy (taking over default hashtag handling).
 	 * Other mappings assign their fixed destination_terms.
 	 *
+	 * When an entry sets create_if_missing and the destination taxonomy does
+	 * not yet exist, it is registered on demand (F9.3) before terms are set.
+	 *
 	 * @param int                  $post_id The created post ID.
 	 * @param NormalizedItem       $item    The normalized item.
 	 * @param array<string, mixed> $mapping Mapping configuration.
@@ -223,10 +259,183 @@ class ContentCreator {
 				continue;
 			}
 
-			wp_set_object_terms( $post_id, $terms, $entry['destination_taxonomy'], true );
+			$taxonomy = $entry['destination_taxonomy'];
+
+			// Create the taxonomy on demand when requested and missing (F9.3).
+			if ( ! empty( $entry['create_if_missing'] ) && ! taxonomy_exists( $taxonomy ) ) {
+				$label = isset( $entry['taxonomy_label'] ) && is_string( $entry['taxonomy_label'] ) && '' !== $entry['taxonomy_label']
+					? $entry['taxonomy_label']
+					: $taxonomy;
+
+				$object_type = get_post_type( $post_id );
+
+				$this->taxonomy_registrar->ensure_registered(
+					$taxonomy,
+					$label,
+					array( is_string( $object_type ) && '' !== $object_type ? $object_type : 'post' )
+				);
+			}
+
+			// Skip taxonomies that still do not exist to avoid silent failures.
+			if ( ! taxonomy_exists( $taxonomy ) ) {
+				continue;
+			}
+
+			wp_set_object_terms( $post_id, $terms, $taxonomy, true );
 		}
 
 		return $hashtags_handled;
+	}
+
+	/**
+	 * Resolve the destination author user ID for an item (F9.2).
+	 *
+	 * A source-author mapping whose source_author matches the item's author
+	 * name wins. Otherwise the mapping's default_author_id applies. Only
+	 * users that actually exist are returned; everything else falls back to
+	 * WordPress's default behavior (null is returned).
+	 *
+	 * @param NormalizedItem       $item    The normalized item.
+	 * @param array<string, mixed> $mapping Mapping configuration.
+	 * @return int|null Author user ID, or null to use the default.
+	 */
+	private function resolve_author_id( NormalizedItem $item, array $mapping ): ?int {
+		if ( ! empty( $mapping['author_mappings'] ) && is_array( $mapping['author_mappings'] ) && null !== $item->author_name ) {
+			foreach ( $mapping['author_mappings'] as $entry ) {
+				if ( ! is_array( $entry )
+					|| empty( $entry['source_author'] )
+					|| ! is_string( $entry['source_author'] )
+					|| ! isset( $entry['destination_user_id'] )
+				) {
+					continue;
+				}
+
+				if ( $entry['source_author'] === $item->author_name ) {
+					$user_id = (int) $entry['destination_user_id'];
+
+					if ( $this->user_exists( $user_id ) ) {
+						return $user_id;
+					}
+
+					break;
+				}
+			}
+		}
+
+		if ( isset( $mapping['default_author_id'] ) ) {
+			$default_id = (int) $mapping['default_author_id'];
+
+			if ( $default_id > 0 && $this->user_exists( $default_id ) ) {
+				return $default_id;
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Check that a WordPress user exists.
+	 *
+	 * @param int $user_id User ID.
+	 * @return bool True when the user exists.
+	 */
+	private function user_exists( int $user_id ): bool {
+		if ( $user_id < 1 ) {
+			return false;
+		}
+
+		return false !== get_userdata( $user_id );
+	}
+
+	/**
+	 * Assign a WordPress post format to the created post (F9.4).
+	 *
+	 * A per-content-type mapping wins over the mapping's default_post_format.
+	 * The format is only applied when the destination post type supports the
+	 * 'post-formats' feature. The 'standard' pseudo-format clears any format.
+	 *
+	 * @param int                  $post_id   The created post ID.
+	 * @param string               $post_type The destination post type.
+	 * @param NormalizedItem       $item      The normalized item.
+	 * @param array<string, mixed> $mapping   Mapping configuration.
+	 * @return void
+	 */
+	private function apply_post_format( int $post_id, string $post_type, NormalizedItem $item, array $mapping ): void {
+		$format = null;
+
+		if ( ! empty( $mapping['post_format_mappings'] ) && is_array( $mapping['post_format_mappings'] ) ) {
+			foreach ( $mapping['post_format_mappings'] as $entry ) {
+				if ( is_array( $entry )
+					&& isset( $entry['source_content_type'], $entry['post_format'] )
+					&& $entry['source_content_type'] === $item->content_type->value
+					&& is_string( $entry['post_format'] )
+					&& '' !== $entry['post_format']
+				) {
+					$format = $entry['post_format'];
+					break;
+				}
+			}
+		}
+
+		if ( null === $format && isset( $mapping['default_post_format'] ) && is_string( $mapping['default_post_format'] ) && '' !== $mapping['default_post_format'] ) {
+			$format = $mapping['default_post_format'];
+		}
+
+		if ( null === $format ) {
+			return;
+		}
+
+		// Only post types declaring post-formats support can carry a format.
+		if ( ! post_type_supports( $post_type, 'post-formats' ) ) {
+			return;
+		}
+
+		// set_post_format() treats 'standard' as clearing the format.
+		set_post_format( $post_id, 'standard' === $format ? false : $format );
+	}
+
+	/**
+	 * Copy mapped item metadata to post meta (F9.1, generic post-meta only).
+	 *
+	 * For each meta_field_mappings entry, the value at item->metadata[
+	 * source_field] is written to the destination post meta key. ACF and
+	 * Meta Box fields are stored as ordinary post meta, so this covers their
+	 * basic value storage; full ACF field-group detection (field keys,
+	 * repeaters, sub-fields) is out of scope for this generic mapping.
+	 *
+	 * @param int                  $post_id The created post ID.
+	 * @param NormalizedItem       $item    The normalized item.
+	 * @param array<string, mixed> $mapping Mapping configuration.
+	 * @return void
+	 */
+	private function apply_meta_field_mappings( int $post_id, NormalizedItem $item, array $mapping ): void {
+		if ( empty( $mapping['meta_field_mappings'] ) || ! is_array( $mapping['meta_field_mappings'] ) ) {
+			return;
+		}
+
+		foreach ( $mapping['meta_field_mappings'] as $entry ) {
+			if ( ! is_array( $entry )
+				|| empty( $entry['source_field'] )
+				|| ! is_string( $entry['source_field'] )
+				|| empty( $entry['destination_meta_key'] )
+				|| ! is_string( $entry['destination_meta_key'] )
+			) {
+				continue;
+			}
+
+			if ( ! array_key_exists( $entry['source_field'], $item->metadata ) ) {
+				continue;
+			}
+
+			$value = $item->metadata[ $entry['source_field'] ];
+
+			// Only persist scalar or array values; objects/resources are skipped.
+			if ( ! is_scalar( $value ) && ! is_array( $value ) && null !== $value ) {
+				continue;
+			}
+
+			update_post_meta( $post_id, sanitize_key( $entry['destination_meta_key'] ), $value );
+		}
 	}
 
 	/**
