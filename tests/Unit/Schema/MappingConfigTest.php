@@ -34,6 +34,11 @@ class MappingConfigTest extends TestCase {
 				return trim( strip_tags( (string) $value ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- Test stub.
 			}
 		);
+		Functions\when( 'absint' )->alias(
+			function ( $value ) {
+				return abs( (int) $value );
+			}
+		);
 	}
 
 	/**
@@ -49,8 +54,163 @@ class MappingConfigTest extends TestCase {
 		$this->assertArrayHasKey( 'post_status', $schema['properties'] );
 		$this->assertArrayHasKey( 'post_type_mappings', $schema['properties'] );
 		$this->assertArrayHasKey( 'taxonomy_mappings', $schema['properties'] );
+		$this->assertArrayHasKey( 'author_mappings', $schema['properties'] );
+		$this->assertArrayHasKey( 'default_author_id', $schema['properties'] );
+		$this->assertArrayHasKey( 'post_format_mappings', $schema['properties'] );
+		$this->assertArrayHasKey( 'default_post_format', $schema['properties'] );
+		$this->assertArrayHasKey( 'meta_field_mappings', $schema['properties'] );
 		$this->assertFalse( $schema['additionalProperties'] );
 		$this->assertSame( MappingConfig::ALLOWED_STATUSES, $schema['properties']['post_status']['enum'] );
+		$this->assertSame( MappingConfig::ALLOWED_POST_FORMATS, $schema['properties']['default_post_format']['enum'] );
+	}
+
+	/**
+	 * Test author mappings are sanitized and malformed entries dropped.
+	 *
+	 * @return void
+	 */
+	public function test_sanitize_author_mappings(): void {
+		$result = MappingConfig::sanitize(
+			array(
+				'author_mappings' => array(
+					array(
+						'source_author'       => '@jane',
+						'destination_user_id' => '7',
+					),
+					// Missing destination user.
+					array( 'source_author' => '@bob' ),
+					// Zero / invalid user ID.
+					array(
+						'source_author'       => '@zero',
+						'destination_user_id' => 0,
+					),
+					'not-an-array',
+				),
+				'default_author_id' => '3',
+			)
+		);
+
+		$this->assertSame(
+			array(
+				array(
+					'source_author'       => '@jane',
+					'destination_user_id' => 7,
+				),
+			),
+			$result['author_mappings']
+		);
+		$this->assertSame( 3, $result['default_author_id'] );
+	}
+
+	/**
+	 * Test an invalid default author ID is dropped.
+	 *
+	 * @return void
+	 */
+	public function test_sanitize_rejects_invalid_default_author(): void {
+		$result = MappingConfig::sanitize( array( 'default_author_id' => 0 ) );
+
+		$this->assertArrayNotHasKey( 'default_author_id', $result );
+	}
+
+	/**
+	 * Test post format mappings validate the format against the allowed list.
+	 *
+	 * @return void
+	 */
+	public function test_sanitize_post_format_mappings(): void {
+		$result = MappingConfig::sanitize(
+			array(
+				'post_format_mappings' => array(
+					array(
+						'source_content_type' => 'media',
+						'post_format'         => 'gallery',
+					),
+					// Invalid format dropped.
+					array(
+						'source_content_type' => 'video',
+						'post_format'         => 'bogus',
+					),
+				),
+				'default_post_format'  => 'aside',
+			)
+		);
+
+		$this->assertSame(
+			array(
+				array(
+					'source_content_type' => 'media',
+					'post_format'         => 'gallery',
+				),
+			),
+			$result['post_format_mappings']
+		);
+		$this->assertSame( 'aside', $result['default_post_format'] );
+	}
+
+	/**
+	 * Test an invalid default post format is rejected.
+	 *
+	 * @return void
+	 */
+	public function test_sanitize_rejects_invalid_default_post_format(): void {
+		$result = MappingConfig::sanitize( array( 'default_post_format' => 'bogus' ) );
+
+		$this->assertArrayNotHasKey( 'default_post_format', $result );
+	}
+
+	/**
+	 * Test meta field mappings sanitize keys and drop malformed entries.
+	 *
+	 * @return void
+	 */
+	public function test_sanitize_meta_field_mappings(): void {
+		$result = MappingConfig::sanitize(
+			array(
+				'meta_field_mappings' => array(
+					array(
+						'source_field'         => 'location',
+						'destination_meta_key' => 'My Geo Field!',
+					),
+					// Missing destination.
+					array( 'source_field' => 'mood' ),
+					'not-an-array',
+				),
+			)
+		);
+
+		$this->assertSame(
+			array(
+				array(
+					'source_field'         => 'location',
+					'destination_meta_key' => 'mygeofield',
+				),
+			),
+			$result['meta_field_mappings']
+		);
+	}
+
+	/**
+	 * Test taxonomy mappings keep create_if_missing and the custom label.
+	 *
+	 * @return void
+	 */
+	public function test_sanitize_taxonomy_create_if_missing(): void {
+		$result = MappingConfig::sanitize(
+			array(
+				'taxonomy_mappings' => array(
+					array(
+						'source_signal'        => 'hashtags',
+						'destination_taxonomy' => 'mood',
+						'create_if_missing'    => true,
+						'taxonomy_label'       => 'Mood',
+					),
+				),
+			)
+		);
+
+		$this->assertTrue( $result['taxonomy_mappings'][0]['create_if_missing'] );
+		$this->assertSame( 'Mood', $result['taxonomy_mappings'][0]['taxonomy_label'] );
 	}
 
 	/**
