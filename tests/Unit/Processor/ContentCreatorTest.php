@@ -219,6 +219,172 @@ class ContentCreatorTest extends TestCase {
 	}
 
 	/**
+	 * Test posts default to draft status and the post post type.
+	 *
+	 * @return void
+	 */
+	public function test_defaults_without_mapping(): void {
+		$captured = $this->capture_insert_args();
+
+		$this->creator->create( $this->make_item(), 'batch-abc' );
+
+		$this->assertSame( 'post', $captured['args']['post_type'] );
+		$this->assertSame( 'draft', $captured['args']['post_status'] );
+	}
+
+	/**
+	 * Test the mapping's default post type and status are applied.
+	 *
+	 * @return void
+	 */
+	public function test_mapping_post_type_and_status_applied(): void {
+		$captured = $this->capture_insert_args();
+
+		$this->creator->create(
+			$this->make_item(),
+			'batch-abc',
+			array(
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+			)
+		);
+
+		$this->assertSame( 'page', $captured['args']['post_type'] );
+		$this->assertSame( 'publish', $captured['args']['post_status'] );
+	}
+
+	/**
+	 * Test a per-content-type override wins over the mapping default.
+	 *
+	 * @return void
+	 */
+	public function test_mapping_post_type_override_per_content_type(): void {
+		$captured = $this->capture_insert_args();
+
+		$this->creator->create(
+			$this->make_item(),
+			'batch-abc',
+			array(
+				'post_type'          => 'page',
+				'post_type_mappings' => array(
+					array(
+						'source_content_type'   => 'thread',
+						'destination_post_type' => 'story',
+					),
+					array(
+						'source_content_type'   => ContentType::POST->value,
+						'destination_post_type' => 'note',
+					),
+				),
+			)
+		);
+
+		$this->assertSame( 'note', $captured['args']['post_type'] );
+	}
+
+	/**
+	 * Test a hashtags taxonomy mapping routes tags to the destination taxonomy.
+	 *
+	 * @return void
+	 */
+	public function test_mapping_routes_hashtags_to_taxonomy(): void {
+		$set_terms = array();
+		$set_tags  = false;
+
+		Functions\when( 'wp_set_object_terms' )->alias(
+			function ( $post_id, $terms, $taxonomy ) use ( &$set_terms ) {
+				$set_terms[ $taxonomy ] = $terms;
+				return array();
+			}
+		);
+		Functions\when( 'wp_set_post_tags' )->alias(
+			function () use ( &$set_tags ) {
+				$set_tags = true;
+				return true;
+			}
+		);
+
+		$item = $this->make_item( array( 'tags' => array( 'wordpress', 'ai' ) ) );
+
+		$this->creator->create(
+			$item,
+			'batch-abc',
+			array(
+				'taxonomy_mappings' => array(
+					array(
+						'source_signal'        => 'hashtags',
+						'destination_taxonomy' => 'topic',
+						'destination_terms'    => array(),
+					),
+				),
+			)
+		);
+
+		$this->assertSame( array( 'wordpress', 'ai' ), $set_terms['topic'] );
+		$this->assertFalse( $set_tags, 'Default hashtag handling should be skipped when mapped.' );
+	}
+
+	/**
+	 * Test fixed destination terms are assigned for non-hashtag signals.
+	 *
+	 * @return void
+	 */
+	public function test_mapping_assigns_fixed_destination_terms(): void {
+		$set_terms = array();
+		$set_tags  = false;
+
+		Functions\when( 'wp_set_object_terms' )->alias(
+			function ( $post_id, $terms, $taxonomy ) use ( &$set_terms ) {
+				$set_terms[ $taxonomy ] = $terms;
+				return array();
+			}
+		);
+		Functions\when( 'wp_set_post_tags' )->alias(
+			function () use ( &$set_tags ) {
+				$set_tags = true;
+				return true;
+			}
+		);
+
+		$item = $this->make_item( array( 'tags' => array( 'wordpress' ) ) );
+
+		$this->creator->create(
+			$item,
+			'batch-abc',
+			array(
+				'taxonomy_mappings' => array(
+					array(
+						'source_signal'        => 'suggested_categories',
+						'destination_taxonomy' => 'category',
+						'destination_terms'    => array( 'Notes', 'Updates' ),
+					),
+				),
+			)
+		);
+
+		$this->assertSame( array( 'Notes', 'Updates' ), $set_terms['category'] );
+		$this->assertTrue( $set_tags, 'Default hashtag handling should still run when hashtags are not mapped.' );
+	}
+
+	/**
+	 * Capture the args passed to wp_insert_post.
+	 *
+	 * @return \ArrayObject<string, mixed> Container populated with 'args' on insert.
+	 */
+	private function capture_insert_args(): \ArrayObject {
+		$captured = new \ArrayObject( array( 'args' => array() ) );
+
+		Functions\when( 'wp_insert_post' )->alias(
+			function ( $args ) use ( $captured ) {
+				$captured['args'] = $args;
+				return 42;
+			}
+		);
+
+		return $captured;
+	}
+
+	/**
 	 * Create a test NormalizedItem.
 	 *
 	 * @param array<string, mixed> $overrides Field overrides.

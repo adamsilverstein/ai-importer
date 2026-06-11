@@ -446,6 +446,75 @@ class ImportProcessorTest extends TestCase {
 	}
 
 	/**
+	 * Test process_batch passes the batch mapping to the content creator.
+	 *
+	 * @return void
+	 */
+	public function test_process_batch_passes_mapping_to_creator(): void {
+		$this->register_mock_adapter();
+
+		$mapping = array(
+			'post_type'   => 'page',
+			'post_status' => 'publish',
+		);
+
+		$creator = Mockery::mock( ContentCreator::class );
+		$creator->shouldReceive( 'create' )
+			->once()
+			->with( Mockery::type( NormalizedItem::class ), 'batch-1', $mapping )
+			->andReturn( 100 );
+
+		$media_handler = Mockery::mock( MediaHandler::class );
+		$media_handler->shouldReceive( 'process' )->andReturn( array() );
+
+		$normalizer = $this->create_mock_normalizer();
+
+		Filters\expectApplied( 'ai_importer_normalizers' )
+			->andReturn( array( 'twitter' => $normalizer ) );
+
+		$this->store_batch( 'batch-1', 'processing', array( 'item-1' ) );
+		$this->options['ai_importer_batch_batch-1']['mapping'] = $mapping;
+
+		$processor = new ImportProcessor( $creator, $media_handler );
+		$processor->process_batch( 'batch-1' );
+
+		$batch = $this->options['ai_importer_batch_batch-1'];
+		$this->assertSame( 'completed', $batch['state'] );
+		$this->assertSame( 1, $batch['processed'] );
+	}
+
+	/**
+	 * Test process_batch passes an empty mapping when the batch has none.
+	 *
+	 * @return void
+	 */
+	public function test_process_batch_defaults_to_empty_mapping(): void {
+		$this->register_mock_adapter();
+
+		$creator = Mockery::mock( ContentCreator::class );
+		$creator->shouldReceive( 'create' )
+			->once()
+			->with( Mockery::type( NormalizedItem::class ), 'batch-1', array() )
+			->andReturn( 100 );
+
+		$media_handler = Mockery::mock( MediaHandler::class );
+		$media_handler->shouldReceive( 'process' )->andReturn( array() );
+
+		$normalizer = $this->create_mock_normalizer();
+
+		Filters\expectApplied( 'ai_importer_normalizers' )
+			->andReturn( array( 'twitter' => $normalizer ) );
+
+		$this->store_batch( 'batch-1', 'processing', array( 'item-1' ) );
+
+		$processor = new ImportProcessor( $creator, $media_handler );
+		$processor->process_batch( 'batch-1' );
+
+		$batch = $this->options['ai_importer_batch_batch-1'];
+		$this->assertSame( 1, $batch['processed'] );
+	}
+
+	/**
 	 * Create a mock normalizer that returns a NormalizedItem.
 	 *
 	 * @return ContentNormalizer&\Mockery\MockInterface

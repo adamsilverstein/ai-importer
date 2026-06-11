@@ -8,6 +8,7 @@
 namespace AI_Importer\REST;
 
 use AI_Importer\Adapters\AdapterRegistry;
+use AI_Importer\Schema\MappingConfig;
 use WP_Error;
 use WP_REST_Controller;
 use WP_REST_Request;
@@ -81,6 +82,13 @@ class ImportsController extends WP_REST_Controller {
 							'required' => true,
 							'type'     => 'array',
 							'items'    => array( 'type' => 'string' ),
+						),
+						'mapping'        => array_merge(
+							array(
+								'required'    => false,
+								'description' => __( 'Mapping configuration to apply to imported content.', 'ai-importer' ),
+							),
+							MappingConfig::get_schema()
 						),
 					),
 				),
@@ -235,11 +243,16 @@ class ImportsController extends WP_REST_Controller {
 		$batch_id = wp_generate_uuid4();
 		$now      = gmdate( 'c' );
 
+		// Optional mapping configuration applied when creating posts.
+		$mapping = $request->get_param( 'mapping' );
+		$mapping = is_array( $mapping ) ? MappingConfig::sanitize( $mapping ) : array();
+
 		$batch = array(
 			'id'             => $batch_id,
 			'source_adapter' => $source_adapter,
 			'state'          => 'processing',
 			'item_ids'       => $item_ids,
+			'mapping'        => $mapping,
 			'total'          => count( $item_ids ),
 			'processed'      => 0,
 			'failed'         => 0,
